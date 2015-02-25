@@ -6,6 +6,8 @@ from copy import deepcopy
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
+import sys
+import gzip
 
 # --- CONSTANTS --- #
 EXACT=False
@@ -13,6 +15,51 @@ PERSISTENT=True
 if EXACT: PERSISTENT=False
 print 'EXACT:', str(EXACT)
 print 'PERSISTENT:', str(PERSISTENT)
+
+class data_stream(object):
+    """
+    Class for data stream.
+    (can use this as a generator)
+    """
+    def __init__(self, path):
+        self.path = path
+    def __iter__(self):
+        """
+        Just spits out lines from the file.
+        """
+        fi = gzip.open(self.path,'r')
+        header = fi.readline()
+        while True:
+            line = fi.readline()
+            if len(line) == 0: # EOF
+                break
+            else:
+                example = map(int, line.split())
+                yield example
+    def get_vocab_sizes(self):
+        """
+        The first line of the data file should contain W, R.
+        """
+        fi = gzip.open(self.path,'r')
+        header = fi.readline()
+        fi.close()
+        values = map(int, header.split())
+        if len(values) == 2:
+            W, R = values
+        else:
+            sys.exit('ERROR: data file incorrectly formatted.')
+        return W, R
+    def acquire_all(self):
+        """
+        Just suck it all in!
+        """
+        traindata = [[0, 0, 0]]
+        fi = gzip.open(self.path, 'r')
+        header = fi.readline()
+        for line in fi:
+            s, r, t = map(int, line.split())
+            traindata.append([s, r, t])
+        return np.array(traindata[1:])
 
 class params(object):
     """
@@ -222,12 +269,11 @@ def train(training_data, start_parameters, options):
     samples = np.zeros(shape=(S, 3),dtype=np.int)
     parameters = params(start_parameters)
     # diagnostic things
-    # yolo
-    #ll_trace = [[0, log_likelihood(parameters, training_data)]]
-    ll_trace = [[0, 0]]
-    de_trace = [[0, 0]]
-    me_trace = [[0, 0]]
-    ve_trace = [[0, 0]]
+    ll_trace = [[0, log_likelihood(parameters, training_data)]]
+    # energy traces
+    de_trace, me_trace, ve_trace, re_trace = [[0, 0]], [[0, 0]], [[0, 0]], [[0, 0]]
+    W = parameters.C.shape[0]
+    R = parameters.G.shape[0]
     vali_set = set()
     #vali_set = np.empty(shape=(D, 3), dtype=np.int)
     n = 0
@@ -253,15 +299,16 @@ def train(training_data, start_parameters, options):
             parameters.update(delta_params, alpha, mu)
         if n%D == 0 and n > B:
             # TODO: all diagnostics
-            # yolo
-            #ll_trace.append([n, log_likelihood(parameters, training_data)])
-            ll_trace.append([n, 0])
+            ll_trace.append([n, log_likelihood(parameters, training_data)])
             de_trace.append([n, np.mean(parameters.E(batch))])
             ve_trace.append([n, np.mean(parameters.E(np.array(list(vali_set))))])
+            # yolo
+            random_lox = np.array(zip(np.random.randint(0, W, D*10), np.random.randint(0, R, D*10), np.random.randint(0, W, D*10)))
+            re_trace.append([n, np.mean(parameters.E(random_lox))])
             if PERSISTENT:
                 me_trace.append([n, np.mean(parameters.E(samples))])
             else:
                 me_trace.append([n, 0])
             convergence = 10
     print 'Training done,', n, 'examples seen.'
-    return parameters, (ll_trace, de_trace, me_trace, ve_trace), convergence
+    return parameters, (ll_trace, de_trace, me_trace, ve_trace, re_trace), convergence
