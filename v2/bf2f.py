@@ -8,7 +8,11 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 # --- CONSTANTS --- #
-EXACT=True
+EXACT=False
+PERSISTENT=True
+if EXACT: PERSISTENT=False
+print 'EXACT:', str(EXACT)
+print 'PERSISTENT:', str(PERSISTENT)
 
 class params(object):
     """
@@ -106,6 +110,7 @@ def plot_trace(trace):
     Simple scatter-plot of the trace of log-likelihood.
     """
     # TODO: make beautiful
+    # todo: fix
     fig = plt.figure()
     n = trace[:, 0]
     ll = trace[:, 1]
@@ -189,7 +194,9 @@ def combine_gradients(delta_data, delta_model, B, M):
     # impose constraints
     delta_C[:, -1] = 0
     delta_V[:, -1] = 0
-    delta_G[:, -1, :] = 0
+    #delta_G[:, -1, :] = 0
+    # yolo
+    delta_G[:, :, :] = 0
     return delta_C, delta_G, delta_V
 
 def train(training_data, start_parameters, options):
@@ -211,14 +218,30 @@ def train(training_data, start_parameters, options):
     alpha, mu = options['alpha'], options['mu']
     # initialise
     batch = np.empty(shape=(B, 3),dtype=np.int)
-    parameters = params(start_parameters)
-    ll_trace = [log_likelihood(parameters, training_data)]
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(S, 3),dtype=np.int)
-    for (n, example) in enumerate(training_data):
+    parameters = params(start_parameters)
+    # diagnostic things
+    # yolo
+    #ll_trace = [[0, log_likelihood(parameters, training_data)]]
+    ll_trace = [[0, 0]]
+    de_trace = [[0, 0]]
+    me_trace = [[0, 0]]
+    ve_trace = [[0, 0]]
+    vali_set = set()
+    #vali_set = np.empty(shape=(D, 3), dtype=np.int)
+    n = 0
+    for example in training_data:
+        # yolo
+        if len(vali_set) < D:
+            vali_set.add(tuple(example))
+            continue
+        if tuple(example) in vali_set:
+            continue
         batch[n%B, :] = example
-        if n == 0: continue
+        n += 1
         if not EXACT and n%S == 0:
+            if not PERSISTENT: samples[:, :] = batch[:, :]
             for (m, samp) in enumerate(samples):
                 samples[m, :] = parameters.sample(samp, K)
             delta_model = batch_gradient(parameters, samples)
@@ -228,9 +251,17 @@ def train(training_data, start_parameters, options):
             delta_data = batch_gradient(parameters, batch)
             delta_params = combine_gradients(delta_data, delta_model, B, len(samples))
             parameters.update(delta_params, alpha, mu)
-        if n%D == 0:
+        if n%D == 0 and n > B:
             # TODO: all diagnostics
-            ll_trace.append([n, log_likelihood(parameters, training_data)])
-            # print 'Diagnostics would happen here!'
+            # yolo
+            #ll_trace.append([n, log_likelihood(parameters, training_data)])
+            ll_trace.append([n, 0])
+            de_trace.append([n, np.mean(parameters.E(batch))])
+            ve_trace.append([n, np.mean(parameters.E(np.array(list(vali_set))))])
+            if PERSISTENT:
+                me_trace.append([n, np.mean(parameters.E(samples))])
+            else:
+                me_trace.append([n, 0])
             convergence = 10
-    return parameters, ll_trace, convergence
+    print 'Training done,', n, 'examples seen.'
+    return parameters, (ll_trace, de_trace, me_trace, ve_trace), convergence
