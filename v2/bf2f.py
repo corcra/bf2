@@ -8,13 +8,17 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 import sys
 import gzip
+from theano import function, shared
+import theano.tensor as tten
 
 # --- CONSTANTS --- #
 EXACT=False
 PERSISTENT=True
+THEANO=False
 if EXACT: PERSISTENT=False
 print 'EXACT:', str(EXACT)
 print 'PERSISTENT:', str(PERSISTENT)
+print 'THEANO:', str(THEANO)
 
 class data_stream(object):
     """
@@ -61,19 +65,53 @@ class data_stream(object):
             traindata.append([s, r, t])
         return np.array(traindata[1:])
 
+class theano_params(object):
+    """
+    Parameter object which is... theano-ey.
+    """
+    def __init__(self, initial_parameters):
+        C, G, V = initial_parameters
+        if C.shape != V.shape:
+            raise ValueError
+        if G.shape[1] != C.shape[1]:
+            raise ValueError
+        if G.shape[2] != C.shape[1]:
+            raise ValueError
+        # weights
+        self.C = shared(np.float32(C), 'C')
+        self.G = shared(np.float32(G), 'G')
+        self.V = shared(np.float32(V), 'V')
+        # velocities
+        self.C_vel = shared(np.zeros(shape=self.C.shape, dtype=np.float32), 'C_vel')
+        self.G_vel = shared(np.zeros(shape=self.G.shape, dtype=np.float32), 'G_vel')
+        self.V_vel = shared(np.zeros(shape=self.V.shape, dtype=np.float32), 'V_vel')
+        # define other 'functions'
+        velocity_updates = [(self.C_vel, muC*self.C_vel + (1 - muC)*deltaC),
+                            (self.G_vel, muG*self.G_vel + (1 - muG)*deltaG),
+                            (self.V_vel, muV*self.V_vel + (1 - muV)*deltaV)]
+        weight_updates = [(self.C, self.C + alphaC*self.C_vel),
+                          (self.G, self.G + alphaG*self.G_vel),
+                          (self.V, self.V + alphaV*self.V_vel)]
+        # TODO
+        self.update = function(...)
+
 class params(object):
     """
     Parameter object.
     Contains C, G, V and velocities for all.
     """
     def __init__(self, initial_parameters):
-        self.C, self.G, self.V = initial_parameters
-        if self.C.shape != self.V.shape:
+        C, G, V = initial_parameters
+        if C.shape != V.shape:
             raise ValueError
-        if self.G.shape[1] != self.C.shape[1]:
+        if G.shape[1] != C.shape[1]:
             raise ValueError
-        if self.G.shape[2] != self.C.shape[1]:
+        if G.shape[2] != C.shape[1]:
             raise ValueError
+        # weights
+        self.C = C
+        self.G = G
+        self.V = V
         # velocities
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
@@ -275,7 +313,6 @@ def train(training_data, start_parameters, options):
     W = parameters.C.shape[0]
     R = parameters.G.shape[0]
     vali_set = set()
-    #vali_set = np.empty(shape=(D, 3), dtype=np.int)
     n = 0
     for example in training_data:
         # yolo
@@ -298,11 +335,9 @@ def train(training_data, start_parameters, options):
             delta_params = combine_gradients(delta_data, delta_model, B, len(samples))
             parameters.update(delta_params, alpha, mu)
         if n%D == 0 and n > B:
-            # TODO: all diagnostics
             ll_trace.append([n, log_likelihood(parameters, training_data)])
             de_trace.append([n, np.mean(parameters.E(batch))])
             ve_trace.append([n, np.mean(parameters.E(np.array(list(vali_set))))])
-            # yolo
             random_lox = np.array(zip(np.random.randint(0, W, D*10), np.random.randint(0, R, D*10), np.random.randint(0, W, D*10)))
             re_trace.append([n, np.mean(parameters.E(random_lox))])
             if PERSISTENT:
