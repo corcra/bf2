@@ -93,7 +93,8 @@ class theano_params(object):
                           (self.G, self.G + alphaG*self.G_vel),
                           (self.V, self.V + alphaV*self.V_vel)]
         # TODO
-        self.update = function(...)
+        #self.update = function(...)
+        # TODO TODO TODO
 
 class params(object):
     """
