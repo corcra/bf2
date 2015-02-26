@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 import sys
 import gzip
 from theano import function, shared
-import theano.tensor as tten
+from theano.tensor import fscalar, fmatrix, ftensor3
 
 # --- CONSTANTS --- #
-EXACT=False
+EXACT=True
 PERSISTENT=True
 THEANO=False
 if EXACT: PERSISTENT=False
@@ -77,24 +77,106 @@ class theano_params(object):
             raise ValueError
         if G.shape[2] != C.shape[1]:
             raise ValueError
+        self.W = C.shape[0]
+        self.R = G.shape[0]
+        self.d = C.shape[1] - 1
+        # --- initialise shared variables --- #
         # weights
         self.C = shared(np.float32(C), 'C')
         self.G = shared(np.float32(G), 'G')
         self.V = shared(np.float32(V), 'V')
         # velocities
-        self.C_vel = shared(np.zeros(shape=self.C.shape, dtype=np.float32), 'C_vel')
-        self.G_vel = shared(np.zeros(shape=self.G.shape, dtype=np.float32), 'G_vel')
-        self.V_vel = shared(np.zeros(shape=self.V.shape, dtype=np.float32), 'V_vel')
-        # define other 'functions'
+        self.C_vel = shared(np.zeros(shape=C.shape, dtype=np.float32), 'C_vel')
+        self.G_vel = shared(np.zeros(shape=G.shape, dtype=np.float32), 'G_vel')
+        self.V_vel = shared(np.zeros(shape=V.shape, dtype=np.float32), 'V_vel')
+        # --- define theano functions --- #
+        # symbolic variables
+        muC = tten.fscalar('muC')
+        muG = tten.fscalar('muG')
+        muV = tten.fscalar('muV')
+        alphaC = tten.fscalar('alphaC')
+        alphaG = tten.fscalar('alphaG')
+        alphaV = tten.fscalar('alphaV')
+        deltaC = tten.fmatrix('deltaC')
+        deltaG = tten.ftensor3('deltaG')
+        deltaV = tten.fmatrix('deltaV')
+        # updates
+        velocity_inputs = [deltaC, deltaG, deltaV, muC, muG, muV]
         velocity_updates = [(self.C_vel, muC*self.C_vel + (1 - muC)*deltaC),
                             (self.G_vel, muG*self.G_vel + (1 - muG)*deltaG),
                             (self.V_vel, muV*self.V_vel + (1 - muV)*deltaV)]
-        weight_updates = [(self.C, self.C + alphaC*self.C_vel),
-                          (self.G, self.G + alphaG*self.G_vel),
-                          (self.V, self.V + alphaV*self.V_vel)]
-        # TODO
-        #self.update = function(...)
-        # TODO TODO TODO
+        parameter_updates = [(self.C, self.C + alphaC*self.C_vel),
+                             (self.G, self.G + alphaG*self.G_vel),
+                             (self.V, self.V + alphaV*self.V_vel)]
+        parameter_inputs = [alphaC, alphaG, alphaV]
+        self.update_velocities = function(velocity_inputs, [], updates=velocity_updates, allow_input_downcast=True)
+        self.update_parameters = function(parameter_inputs, [], updates=parameter_updates, allow_input_downcast=True)
+        
+    def update(self, delta_parameters, alpha, mu):
+        """
+        Update velocities and then parameters.
+        """
+        # unwrap
+        deltaC, deltaG, deltaV = delta_parameters
+        alphaC, alphaG, alphaV = alpha
+        muC, muG, muV = mu
+        # call theano fns
+        self.update_velocities(deltaC, deltaG, deltaV, muC, muG, muV)
+        self.update_parameters(alphaC, alphaG, alphaV)
+
+    def grad_E(self, locations):
+        """
+        Gradients of the energy, evaluated at a list of triples.
+        NOTE: this clearly depends on the choice of energy.
+        Returns tensors whose first index corresponds to the input triple list.
+        """
+        C_sub = self.C.get_value()[locations[:, 0]]
+        G_sub = self.G.get_value()[locations[:, 1]]
+        V_sub = self.V.get_value()[locations[:, 2]]
+        # this is for Etype == 'dot'
+        # TODO: theanofy
+        dE_C = -np.einsum('...i,...ij', V_sub, G_sub)
+        dE_G = -np.einsum('...i,...j', V_sub, C_sub)
+        dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
+        return dE_C, dE_G, dE_V
+
+    def E(self, locations):
+        """
+        Just plain old energy between triples.
+        locations is an array of triples.
+        Outputs a list (same length as 'locations') of energy of each triple.
+        """
+        C_sub = self.C.get_value()[locations[:, 0]]
+        G_sub = self.G.get_value()[locations[:, 1]]
+        V_sub = self.V.get_value()[locations[:, 2]]
+        # this is for Etype == 'dot'
+        # TODO: theanofy
+        GC_sub = np.einsum('...ij,...j', G_sub, C_sub)
+        energy = -np.einsum('...i,...i', V_sub, GC_sub)
+        return energy
+
+    def sample(self, seed, K):
+        """
+        Draws samples from the model, given a (single!) seed.
+        (iterates through Gibbs sampling K times)
+        """
+        W = self.C.get_value().shape[0]
+        R = self.G.get_value().shape[0]
+        ss = deepcopy(seed)
+        for iteration in xrange(K):
+            order = np.random.permutation(3)
+            for triple_drop in order:
+                if triple_drop == 0:
+                    locs = np.array([ [i, ss[1], ss[2]] for i in xrange(W) ])
+                if triple_drop == 1:
+                    locs = np.array([ [ss[0], i, ss[2]] for i in xrange(R) ])
+                if triple_drop == 2:
+                    locs = np.array([ [ss[0], ss[1], i] for i in xrange(W) ])
+                expmE = np.exp(-self.E(locs))
+                probs = expmE/np.sum(expmE)
+                samp = np.random.choice(len(probs), p=probs, size=1)[0]
+                ss[triple_drop] = samp
+        return ss
 
 class params(object):
     """
@@ -109,6 +191,9 @@ class params(object):
             raise ValueError
         if G.shape[2] != C.shape[1]:
             raise ValueError
+        self.W = C.shape[0]
+        self.R = G.shape[0]
+        self.d = C.shape[1] - 1
         # weights
         self.C = C
         self.G = G
@@ -211,8 +296,8 @@ def log_likelihood(parameters, data):
     """
     WARNING: Probably don't want to do this most of the time.
     """
-    W = parameters.C.shape[0]
-    R = parameters.G.shape[0]
+    W = parameters.W
+    R = parameters.R
     locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
     energy = parameters.E(locations).reshape(W, R, W)
     logZ = np.log(np.sum(np.exp(-energy)))
@@ -224,8 +309,9 @@ def Z_gradient(parameters):
     Calculates EXACT gradient of the partition function.
     NOTE: intractable most of the time.
     """
-    W = parameters.C.shape[0]
-    R = parameters.G.shape[0]
+    W = parameters.W
+    R = parameters.R
+    d = parameters.d
     locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
     # get exponentiated energy
     energy = parameters.E(locations).reshape(W, R, W)
@@ -234,9 +320,9 @@ def Z_gradient(parameters):
     # get gradients
     dE_C, dE_G, dE_V = parameters.grad_E(locations)
     # empty arrays
-    dC_partition = np.zeros(shape=(parameters.C.shape))
-    dG_partition = np.zeros(shape=(parameters.G.shape))
-    dV_partition = np.zeros(shape=(parameters.V.shape))
+    dC_partition = np.zeros(shape=(W, d+1))
+    dG_partition = np.zeros(shape=(R, d+1, d+1))
+    dV_partition = np.zeros(shape=(W, d+1))
     for (n, (s, r, t)) in enumerate(locations):
         dC_partition[s, :] -= dE_C[n, :]*expmE[s, r, t]
         dG_partition[r, :, :] -= dE_G[n, :, :]*expmE[s, r, t]
@@ -255,9 +341,12 @@ def batch_gradient(parameters, batch):
     This is a general function for both tasks
     (so we expect to call it twice for each 'true' gradient evaluation.)
     """
-    dC_batch = np.zeros(shape=(parameters.C.shape))
-    dG_batch = np.zeros(shape=(parameters.G.shape))
-    dV_batch = np.zeros(shape=(parameters.V.shape))
+    W = parameters.W
+    R = parameters.R
+    d = parameters.d
+    dC_batch = np.zeros(shape=(W, d+1))
+    dG_batch = np.zeros(shape=(R, d+1, d+1))
+    dV_batch = np.zeros(shape=(W, d+1))
     dE_C_batch, dE_G_batch, dE_V_batch = parameters.grad_E(batch)
     for (i, (s, r, t)) in enumerate(batch):
         dC_batch[s, :] -= dE_C_batch[i]
@@ -306,22 +395,24 @@ def train(training_data, start_parameters, options):
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(S, 3),dtype=np.int)
-    parameters = params(start_parameters)
+    if THEANO:
+        parameters = theano_params(start_parameters)
+    else:
+        parameters = params(start_parameters)
     # diagnostic things
     ll_trace = [[0, log_likelihood(parameters, training_data)]]
     # energy traces
     de_trace, me_trace, ve_trace, re_trace = [[0, 0]], [[0, 0]], [[0, 0]], [[0, 0]]
-    W = parameters.C.shape[0]
-    R = parameters.G.shape[0]
+    W = parameters.W
+    R = parameters.R
     vali_set = set()
     n = 0
     for example in training_data:
-        # yolo
         if len(vali_set) < D:
             vali_set.add(tuple(example))
             continue
-        if tuple(example) in vali_set:
-            continue
+        #if tuple(example) in vali_set:
+        #    continue
         batch[n%B, :] = example
         n += 1
         if not EXACT and n%S == 0:
