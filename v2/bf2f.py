@@ -8,13 +8,13 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 import sys
 import gzip
-from theano import function, shared
-from theano.tensor import fscalar, fmatrix, ftensor3
+from theano import function, shared, scan
+import theano.tensor as tten
 
 # --- CONSTANTS --- #
 EXACT=True
-PERSISTENT=True
-THEANO=False
+PERSISTENT=False
+THEANO=True
 if EXACT: PERSISTENT=False
 print 'EXACT:', str(EXACT)
 print 'PERSISTENT:', str(PERSISTENT)
@@ -91,6 +91,10 @@ class theano_params(object):
         self.V_vel = shared(np.zeros(shape=V.shape, dtype=np.float32), 'V_vel')
         # --- define theano functions --- #
         # symbolic variables
+        C_locs = tten.ivector('C_locs')
+        G_locs = tten.ivector('G_locs')
+        V_locs = tten.ivector('V_locs')
+        GC = tten.fmatrix('GC')
         muC = tten.fscalar('muC')
         muG = tten.fscalar('muG')
         muV = tten.fscalar('muV')
@@ -100,6 +104,17 @@ class theano_params(object):
         deltaC = tten.fmatrix('deltaC')
         deltaG = tten.ftensor3('deltaG')
         deltaV = tten.fmatrix('deltaV')
+        # energies
+        self.GC  = function([C_locs, G_locs],
+                            tten.batched_dot(self.G[G_locs], self.C[C_locs]))
+        self.energies = function([GC, V_locs],
+                                 -tten.sum(self.V[V_locs]*GC, axis=1))
+        # gradients
+        self.VG = function([G_locs, V_locs],
+                           tten.batched_dot(self.V[V_locs], self.G[G_locs]))
+        VeeCee, updates = scan(fn=lambda C_loc, V_loc: -tten.outer(self.V[V_loc], self.C[C_loc]), outputs_info=None, sequences=[C_locs, V_locs])
+        self.VC = function([C_locs, V_locs], VeeCee)
+
         # updates
         velocity_inputs = [deltaC, deltaG, deltaV, muC, muG, muV]
         velocity_updates = [(self.C_vel, muC*self.C_vel + (1 - muC)*deltaC),
@@ -109,8 +124,12 @@ class theano_params(object):
                              (self.G, self.G + alphaG*self.G_vel),
                              (self.V, self.V + alphaV*self.V_vel)]
         parameter_inputs = [alphaC, alphaG, alphaV]
-        self.update_velocities = function(velocity_inputs, [], updates=velocity_updates, allow_input_downcast=True)
-        self.update_parameters = function(parameter_inputs, [], updates=parameter_updates, allow_input_downcast=True)
+        self.update_velocities = function(velocity_inputs, [],
+                                          updates=velocity_updates,
+                                          allow_input_downcast=True)
+        self.update_parameters = function(parameter_inputs, [],
+                                          updates=parameter_updates,
+                                          allow_input_downcast=True)
         
     def update(self, delta_parameters, alpha, mu):
         """
@@ -130,15 +149,26 @@ class theano_params(object):
         NOTE: this clearly depends on the choice of energy.
         Returns tensors whose first index corresponds to the input triple list.
         """
-        C_sub = self.C.get_value()[locations[:, 0]]
-        G_sub = self.G.get_value()[locations[:, 1]]
-        V_sub = self.V.get_value()[locations[:, 2]]
-        # this is for Etype == 'dot'
-        # TODO: theanofy
-        dE_C = -np.einsum('...i,...ij', V_sub, G_sub)
-        dE_G = -np.einsum('...i,...j', V_sub, C_sub)
-        dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
+        # theanofied version
+        C_locs = list(locations[:, 0])
+        G_locs = list(locations[:, 1])
+        V_locs = list(locations[:, 2])
+        # call theano functions
+        dE_C = -self.VG(G_locs, V_locs)
+        dE_G = self.VC(C_locs, V_locs)
+        dE_V = -self.GC(C_locs, G_locs)
+        ### partially nontheanofied
+        #C_sub = self.C.get_value()[locations[:, 0]]
+        #G_sub = self.G.get_value()[locations[:, 1]]
+        #V_sub = self.V.get_value()[locations[:, 2]]
+        #dE_C = -np.einsum('...i,...ij', V_sub, G_sub)
+        #dE_G = -np.einsum('...i,...j', V_sub, C_sub)
+        #dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
         return dE_C, dE_G, dE_V
+        # nontheano version
+        ## this is for Etype == 'dot'
+        # TODO: theanofy
+        #return dE_C, dE_G, dE_V
 
     def E(self, locations):
         """
@@ -146,13 +176,20 @@ class theano_params(object):
         locations is an array of triples.
         Outputs a list (same length as 'locations') of energy of each triple.
         """
-        C_sub = self.C.get_value()[locations[:, 0]]
-        G_sub = self.G.get_value()[locations[:, 1]]
-        V_sub = self.V.get_value()[locations[:, 2]]
+        C_locs = list(locations[:, 0])
+        G_locs = list(locations[:, 1])
+        V_locs = list(locations[:, 2])
+        # theanoversion
+        GC = self.GC(C_locs, G_locs)
+        energy = self.energies(GC, V_locs)
+        #C_sub = self.C.get_value()[locations[:, 0]]
+        #G_sub = self.G.get_value()[locations[:, 1]]
+        #V_sub = self.V.get_value()[locations[:, 2]]
         # this is for Etype == 'dot'
         # TODO: theanofy
-        GC_sub = np.einsum('...ij,...j', G_sub, C_sub)
-        energy = -np.einsum('...i,...i', V_sub, GC_sub)
+        #GC_sub = np.einsum('...ij,...j', G_sub, C_sub)
+        #energy = -np.einsum('...i,...i', V_sub, GC_sub)
+
         return energy
 
     def sample(self, seed, K):
@@ -178,6 +215,12 @@ class theano_params(object):
                 ss[triple_drop] = samp
         return ss
 
+    def get_parameters(self):
+        """
+        Method to return the (C, G, V) triple.
+        """
+        return (self.C.get_value(), self.G.get_value(), self.V.get_value())
+
 class params(object):
     """
     Parameter object.
@@ -195,9 +238,9 @@ class params(object):
         self.R = G.shape[0]
         self.d = C.shape[1] - 1
         # weights
-        self.C = C
-        self.G = G
-        self.V = V
+        self.C = np.float32(C)
+        self.G = np.float32(G)
+        self.V = np.float32(V)
         # velocities
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
@@ -275,6 +318,12 @@ class params(object):
                 samp = np.random.choice(len(probs), p=probs, size=1)[0]
                 ss[triple_drop] = samp
         return ss
+
+    def get_parameters(self):
+        """
+        Method to return the (C, G, V) triple.
+        """
+        return (self.C, self.G, self.V)
 
 def plot_trace(trace):
     """
@@ -411,6 +460,7 @@ def train(training_data, start_parameters, options):
         if len(vali_set) < D:
             vali_set.add(tuple(example))
             continue
+        # yolo
         #if tuple(example) in vali_set:
         #    continue
         batch[n%B, :] = example
