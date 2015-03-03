@@ -11,16 +11,19 @@ import gzip
 import time
 
 # --- CONSTANTS --- #
-EXACT=False
+EXACT=True
+NOISE=True
 PERSISTENT=True
 THEANO=False
 VERBOSE=True
-if EXACT: PERSISTENT=False
+if NOISE: EXACT=False
+if EXACT or NOISE: PERSISTENT=False
 if THEANO:
     from theano import function, shared, scan
     import theano.tensor as tten
 print 'EXACT:', str(EXACT)
 print 'PERSISTENT:', str(PERSISTENT)
+print 'NOISE:', str(NOISE)
 print 'THEANO:', str(THEANO)
 
 class data_stream(object):
@@ -313,14 +316,24 @@ def log_likelihood(parameters, data):
     WARNING: Probably don't want to do this most of the time.
     """
     # yolo
-    return 0
-    #W = parameters.W
-    #R = parameters.R
-    #locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
-    #energy = parameters.E(locations).reshape(W, R, W)
-    #logZ = np.log(np.sum(np.exp(-energy)))
-    #ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
-    #return ll
+    #return 'NA'
+    W = parameters.W
+    R = parameters.R
+    locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
+    energy = parameters.E(locations).reshape(W, R, W)
+    logZ = np.log(np.sum(np.exp(-energy)))
+    ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
+    return ll
+
+def sample_noise(W, R, M):
+    """
+    Return M totally random samples.
+    TODO: allow for other noise distribution.
+    """
+    noise_samples = np.array(zip(np.random.randint(0, W, M),
+                                 np.random.randint(0, R, M),
+                                 np.random.randint(0, W, M)))
+    return noise_samples
 
 def Z_gradient(parameters):
     """
@@ -421,8 +434,8 @@ def train(training_data, start_parameters, options):
     else:
         parameters = params(start_parameters)
     # diagnostic things
-    logfile = open(logfile,'w')
-    logfile.write('n\tt\tll\tde\tme\tve\tre\n')
+    logf = open(logfile,'w')
+    logf.write('n\tt\tll\tde\tme\tve\tre\n')
     W = parameters.W
     R = parameters.R
     n = 0
@@ -431,14 +444,17 @@ def train(training_data, start_parameters, options):
         if len(vali_set) < D:
             vali_set.add(tuple(example))
             continue
-        if tuple(example) in vali_set:
-            continue
+        #if tuple(example) in vali_set:
+        #    continue
         batch[n%B, :] = example
         n += 1
         if not EXACT and n%S == 0:
-            if not PERSISTENT: samples[:, :] = batch[:, :]
-            for (m, samp) in enumerate(samples):
-                samples[m, :] = parameters.sample(samp, K)
+            if NOISE:
+                samples = sample_noise(W, R, S)
+            else:
+                if not PERSISTENT: samples[:, :] = batch[:, :]
+                for (m, samp) in enumerate(samples):
+                    samples[m, :] = parameters.sample(samp, K)
             delta_model = batch_gradient(parameters, samples)
         if n%B == 0:
             if EXACT:
@@ -451,7 +467,9 @@ def train(training_data, start_parameters, options):
             ll = log_likelihood(parameters, training_data)
             data_energy = np.mean(parameters.E(batch))
             vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
-            random_lox = np.array(zip(np.random.randint(0, W, D*10), np.random.randint(0, R, D*10), np.random.randint(0, W, D*10)))
+            random_lox = np.array(zip(np.random.randint(0, W, 100),
+                                      np.random.randint(0, R, 100),
+                                      np.random.randint(0, W, 100)))
             rand_energy = np.mean(parameters.E(random_lox))
             if PERSISTENT:
                 model_energy = np.mean(parameters.E(samples))
@@ -460,8 +478,12 @@ def train(training_data, start_parameters, options):
             logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy]
             if VERBOSE:
                 for val in logline:
-                    print '\t','%.3f' % val,
+                    if type(val) == float:
+                        print '\t','%.3f' % val,
+                    else:
+                        print '\t', val,
                 print ''
-            logfile.write('\t'.join(map(str, logline))+'\n')
+            logf.write('\t'.join(map(str, logline))+'\n')
+            logf.flush()
     print 'Training done,', n, 'examples seen.'
     return parameters
