@@ -8,14 +8,17 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 import sys
 import gzip
-from theano import function, shared, scan
-import theano.tensor as tten
+import time
 
 # --- CONSTANTS --- #
-EXACT=True
-PERSISTENT=False
-THEANO=True
+EXACT=False
+PERSISTENT=True
+THEANO=False
+VERBOSE=True
 if EXACT: PERSISTENT=False
+if THEANO:
+    from theano import function, shared, scan
+    import theano.tensor as tten
 print 'EXACT:', str(EXACT)
 print 'PERSISTENT:', str(PERSISTENT)
 print 'THEANO:', str(THEANO)
@@ -149,7 +152,6 @@ class theano_params(object):
         NOTE: this clearly depends on the choice of energy.
         Returns tensors whose first index corresponds to the input triple list.
         """
-        # theanofied version
         C_locs = list(locations[:, 0])
         G_locs = list(locations[:, 1])
         V_locs = list(locations[:, 2])
@@ -157,18 +159,7 @@ class theano_params(object):
         dE_C = -self.VG(G_locs, V_locs)
         dE_G = self.VC(C_locs, V_locs)
         dE_V = -self.GC(C_locs, G_locs)
-        ### partially nontheanofied
-        #C_sub = self.C.get_value()[locations[:, 0]]
-        #G_sub = self.G.get_value()[locations[:, 1]]
-        #V_sub = self.V.get_value()[locations[:, 2]]
-        #dE_C = -np.einsum('...i,...ij', V_sub, G_sub)
-        #dE_G = -np.einsum('...i,...j', V_sub, C_sub)
-        #dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
         return dE_C, dE_G, dE_V
-        # nontheano version
-        ## this is for Etype == 'dot'
-        # TODO: theanofy
-        #return dE_C, dE_G, dE_V
 
     def E(self, locations):
         """
@@ -179,17 +170,9 @@ class theano_params(object):
         C_locs = list(locations[:, 0])
         G_locs = list(locations[:, 1])
         V_locs = list(locations[:, 2])
-        # theanoversion
+        # call theano functions
         GC = self.GC(C_locs, G_locs)
         energy = self.energies(GC, V_locs)
-        #C_sub = self.C.get_value()[locations[:, 0]]
-        #G_sub = self.G.get_value()[locations[:, 1]]
-        #V_sub = self.V.get_value()[locations[:, 2]]
-        # this is for Etype == 'dot'
-        # TODO: theanofy
-        #GC_sub = np.einsum('...ij,...j', G_sub, C_sub)
-        #energy = -np.einsum('...i,...i', V_sub, GC_sub)
-
         return energy
 
     def sample(self, seed, K):
@@ -238,9 +221,9 @@ class params(object):
         self.R = G.shape[0]
         self.d = C.shape[1] - 1
         # weights
-        self.C = np.float32(C)
-        self.G = np.float32(G)
-        self.V = np.float32(V)
+        self.C = C
+        self.G = G
+        self.V = V
         # velocities
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
@@ -325,38 +308,25 @@ class params(object):
         """
         return (self.C, self.G, self.V)
 
-def plot_trace(trace):
-    """
-    Simple scatter-plot of the trace of log-likelihood.
-    """
-    # TODO: make beautiful
-    # todo: fix
-    fig = plt.figure()
-    n = trace[:, 0]
-    ll = trace[:, 1]
-    plt.scatter(n, ll, linewidth=0, color='red')
-    plt.ylabel('log-likelihood of training data')
-    plt.xlabel('number of training examples seen')
-    plt.savefig('trace.png')
-    plt.close()
-    return True
-
 def log_likelihood(parameters, data):
     """
     WARNING: Probably don't want to do this most of the time.
     """
-    W = parameters.W
-    R = parameters.R
-    locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
-    energy = parameters.E(locations).reshape(W, R, W)
-    logZ = np.log(np.sum(np.exp(-energy)))
-    ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
-    return ll
+    # yolo
+    return 0
+    #W = parameters.W
+    #R = parameters.R
+    #locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
+    #energy = parameters.E(locations).reshape(W, R, W)
+    #logZ = np.log(np.sum(np.exp(-energy)))
+    #ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
+    #return ll
 
 def Z_gradient(parameters):
     """
     Calculates EXACT gradient of the partition function.
     NOTE: intractable most of the time.
+    This should possibly belong to the parameters.
     """
     W = parameters.W
     R = parameters.R
@@ -440,7 +410,9 @@ def train(training_data, start_parameters, options):
     D = options['diagnostics_rate']
     K = options['gibbs_iterations']
     alpha, mu = options['alpha'], options['mu']
+    logfile = options['logfile']
     # initialise
+    vali_set = set()
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(S, 3),dtype=np.int)
@@ -449,20 +421,18 @@ def train(training_data, start_parameters, options):
     else:
         parameters = params(start_parameters)
     # diagnostic things
-    ll_trace = [[0, log_likelihood(parameters, training_data)]]
-    # energy traces
-    de_trace, me_trace, ve_trace, re_trace = [[0, 0]], [[0, 0]], [[0, 0]], [[0, 0]]
+    logfile = open(logfile,'w')
+    logfile.write('n\tt\tll\tde\tme\tve\tre\n')
     W = parameters.W
     R = parameters.R
-    vali_set = set()
     n = 0
+    t0 = time.time()
     for example in training_data:
         if len(vali_set) < D:
             vali_set.add(tuple(example))
             continue
-        # yolo
-        #if tuple(example) in vali_set:
-        #    continue
+        if tuple(example) in vali_set:
+            continue
         batch[n%B, :] = example
         n += 1
         if not EXACT and n%S == 0:
@@ -477,15 +447,21 @@ def train(training_data, start_parameters, options):
             delta_params = combine_gradients(delta_data, delta_model, B, len(samples))
             parameters.update(delta_params, alpha, mu)
         if n%D == 0 and n > B:
-            ll_trace.append([n, log_likelihood(parameters, training_data)])
-            de_trace.append([n, np.mean(parameters.E(batch))])
-            ve_trace.append([n, np.mean(parameters.E(np.array(list(vali_set))))])
+            t = time.time() - t0
+            ll = log_likelihood(parameters, training_data)
+            data_energy = np.mean(parameters.E(batch))
+            vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
             random_lox = np.array(zip(np.random.randint(0, W, D*10), np.random.randint(0, R, D*10), np.random.randint(0, W, D*10)))
-            re_trace.append([n, np.mean(parameters.E(random_lox))])
+            rand_energy = np.mean(parameters.E(random_lox))
             if PERSISTENT:
-                me_trace.append([n, np.mean(parameters.E(samples))])
+                model_energy = np.mean(parameters.E(samples))
             else:
-                me_trace.append([n, 0])
-            convergence = 10
+                model_energy = 'NA'
+            logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy]
+            if VERBOSE:
+                for val in logline:
+                    print '\t','%.3f' % val,
+                print ''
+            logfile.write('\t'.join(map(str, logline))+'\n')
     print 'Training done,', n, 'examples seen.'
-    return parameters, (ll_trace, de_trace, me_trace, ve_trace, re_trace), convergence
+    return parameters
