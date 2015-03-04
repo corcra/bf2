@@ -12,7 +12,7 @@ import time
 #import pathos.multiprocessing as mp
 
 # --- CONSTANTS --- #
-EXACT=False
+EXACT=True
 NOISE=False
 PERSISTENT=True
 THEANO=False
@@ -393,17 +393,15 @@ class params(object):
 def log_likelihood(parameters, data):
     """
     WARNING: Probably don't want to do this most of the time.
+    Requires 'data' to be a full list (not just a generator, I think...)
     """
-    if True:
-        return 'NA'
-    else:
-        W = parameters.W
-        R = parameters.R
-        locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
-        energy = parameters.E(locations).reshape(W, R, W)
-        logZ = np.log(np.sum(np.exp(-energy)))
-        ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
-        return ll
+    W = parameters.W
+    R = parameters.R
+    locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
+    energy = parameters.E(locations).reshape(W, R, W)
+    logZ = np.log(np.sum(np.exp(-energy)))
+    ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
+    return ll
 
 def sample_noise(W, R, M):
     """
@@ -500,15 +498,17 @@ def train(training_data, start_parameters, options):
     # unwrap options
     B = options['batch_size']
     S = options['sampling_rate']
+    M = options['num_samples']
     D = options['diagnostics_rate']
     K = options['gibbs_iterations']
+    calculate_ll = options['calculate_ll']
     alpha, mu = options['alpha'], options['mu']
     logfile = options['logfile']
     # initialise
     vali_set = set()
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
-    samples = np.zeros(shape=(S, 3),dtype=np.int)
+    samples = np.zeros(shape=(M, 3),dtype=np.int)
     if THEANO:
         parameters = theano_params(start_parameters)
     else:
@@ -546,7 +546,10 @@ def train(training_data, start_parameters, options):
             parameters.update(delta_params, alpha, mu)
         if n%D == 0 and n > B:
             t = time.time() - t0
-            ll = log_likelihood(parameters, training_data)
+            if calculate_ll:
+                ll = log_likelihood(parameters, training_data)
+            else:
+                ll = 'NA'
             data_energy = np.mean(parameters.E(batch))
             vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
             random_lox = np.array(zip(np.random.randint(0, W, 100),
