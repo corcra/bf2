@@ -9,13 +9,15 @@ import matplotlib.pyplot as plt
 import sys
 import gzip
 import time
+import re
 #import pathos.multiprocessing as mp
 
 # --- CONSTANTS --- #
-EXACT=True
+EXACT=False
 PERSISTENT=True
 VERBOSE=True
 NOISE=False
+THEANO=False
 if NOISE: EXACT=False
 if EXACT or NOISE: PERSISTENT=False
 if THEANO:
@@ -242,11 +244,39 @@ class params(object):
                 ss[triple_drop] = samp
         return ss
 
-    def get_parameters(self):
+    def get(self):
         """
         Method to return the (C, G, V) triple.
         """
         return (self.C, self.G, self.V)
+
+    def save(self, filename, words=None):
+        """
+        Method to save the parameters to file.
+        """
+        if '.npy' in filename:
+            np.save(re.sub('XXX','C',filename),self.C)
+            np.save(re.sub('XXX','G',filename),self.G)
+            np.save(re.sub('XXX','V',filename),self.V)
+        elif '.txt' in filename:
+            fC = open(re.sub('XXX','C',filename), 'w')
+            fG = open(re.sub('XXX','G',filename), 'w')
+            fV = open(re.sub('XXX','V',filename), 'w')
+            fC.write(str(self.W)+' '+str(self.C.shape[1]-1)+'\n')
+            fV.write(str(self.W)+' '+str(self.C.shape[1]-1)+'\n')
+            for i in xrange(self.W):
+                try:
+                    word = words[i]
+                except TypeError:
+                    word = 'word_'+str(i)
+                fC.write(word+' '+' '.join(map(str, self.C[i,:-1]))+'\n')
+                fV.write(word+' '+' '.join(map(str, self.V[i,:-1]))+'\n')
+            for i in xrange(self.R):
+                fG.write('rela_'+str(i)+' '+' '.join(map(str, self.G[i,:-1,:].reshape((self.C.shape[1])*(self.C.shape[1]-1),)))+'\n')
+            fC.close()
+            fV.close()
+            fG.close()
+        return True
 
 def log_likelihood(parameters, data):
     """
@@ -361,7 +391,7 @@ def train(training_data, start_parameters, options):
     K = options['gibbs_iterations']
     calculate_ll = options['calculate_ll']
     alpha, mu = options['alpha'], options['mu']
-    logfile = options['logfile']
+    name = options['name']
     # initialise
     vali_set = set()
     batch = np.empty(shape=(B, 3),dtype=np.int)
@@ -372,7 +402,7 @@ def train(training_data, start_parameters, options):
     else:
         parameters = params(start_parameters)
     # diagnostic things
-    logf = open(logfile,'w')
+    logf = open(name+'_logfile.txt','w')
     logf.write('n\tt\tll\tde\tme\tve\tre\n')
     W = parameters.W
     R = parameters.R
@@ -418,6 +448,7 @@ def train(training_data, start_parameters, options):
                 model_energy = np.mean(parameters.E(samples))
             else:
                 model_energy = 'NA'
+            # record to logfile
             logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy]
             if VERBOSE:
                 for val in logline:
@@ -428,5 +459,13 @@ def train(training_data, start_parameters, options):
                 print ''
             logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
+            # get some vector lengths
+            # TODO: make this more elegant
+            see, gee, vee = parameters.get()
+            C_lens = np.linalg.norm(see[random_lox[:, 0], :-1], axis=1)
+            V_lens = np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1)
+            print 'C_lenz:', "%.5f" % np.mean(C_lens), 'V_lenz:', "%.5f" % np.mean(V_lens)
+        if n%(D*10) == 0:
+            parameters.save(name+'_XXX.npy')
     print 'Training done,', n, 'examples seen.'
     return parameters
