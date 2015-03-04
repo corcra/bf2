@@ -1,4 +1,4 @@
-#!/bin/python
+#bin/python
 # Skeleton!
 
 import numpy as np
@@ -9,10 +9,11 @@ import matplotlib.pyplot as plt
 import sys
 import gzip
 import time
+#import pathos.multiprocessing as mp
 
 # --- CONSTANTS --- #
-EXACT=True
-NOISE=True
+EXACT=False
+NOISE=False
 PERSISTENT=True
 THEANO=False
 VERBOSE=True
@@ -25,6 +26,8 @@ print 'EXACT:', str(EXACT)
 print 'PERSISTENT:', str(PERSISTENT)
 print 'NOISE:', str(NOISE)
 print 'THEANO:', str(THEANO)
+# yolo
+#linn = mp.ProcessingPool(5)
 
 class data_stream(object):
     """
@@ -183,8 +186,8 @@ class theano_params(object):
         Draws samples from the model, given a (single!) seed.
         (iterates through Gibbs sampling K times)
         """
-        W = self.C.get_value().shape[0]
-        R = self.G.get_value().shape[0]
+        W = self.W
+        R = self.R
         ss = deepcopy(seed)
         for iteration in xrange(K):
             order = np.random.permutation(3)
@@ -206,6 +209,13 @@ class theano_params(object):
         Method to return the (C, G, V) triple.
         """
         return (self.C.get_value(), self.G.get_value(), self.V.get_value())
+
+def silly_energy(arg):
+    C, G, V = arg[0]
+    triple = arg[1]
+    s, r, t = triple
+    energy = -np.dot(V[t], np.dot(G[r], C[s]))
+    return energy
 
 class params(object):
     """
@@ -245,9 +255,9 @@ class params(object):
         self.G_vel = muG*self.G_vel + (1-muG)*deltaG
         self.V_vel = muV*self.V_vel + (1-muV)*deltaV
         # update parameters
-        self.C = self.C + alphaC*self.C_vel
-        self.G = self.G + alphaG*self.G_vel
-        self.V = self.V + alphaV*self.V_vel
+        self.C += alphaC*self.C_vel
+        self.G += alphaG*self.G_vel
+        self.V += alphaV*self.V_vel
 
     def grad_E(self, locations):
         """
@@ -264,22 +274,87 @@ class params(object):
         dE_G = -np.einsum('...i,...j', V_sub, C_sub)
         dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
         return dE_C, dE_G, dE_V
- 
+
+    def E_axis(self, triple, switch):
+        """
+        Returns energies over an axis (S, R, T) given two of the triple.
+        """
+        s, r, t = triple
+        if switch == 'C':
+            # return over all S
+            #GC = np.dot(self.C, self.G[r].T)
+            #energy = -np.dot(GC, self.V[t])
+            # note: above version is significantly slower than the below
+            VG = np.dot(self.V[t], self.G[r])
+            energy = -np.dot(self.C, VG)
+        elif switch == 'G':
+            # return over all R
+            VG = np.dot(self.V[t], self.G)
+            energy = -np.dot(VG, self.C[s])
+        elif switch == 'V':
+            #return over all T
+            GC = np.dot(self.G[r], self.C[s])
+            energy = -np.dot(self.V, GC)
+        else:
+            print 'ERROR: Cannot parse switch.'
+            sys.exit()
+        return energy
+
+    def E_triple(self, triple):
+        """
+        The energy of a SINGLE triple.
+        """
+        return -np.dot(self.V[triple[2]], np.dot(self.G[triple[1]], self.C[triple[0]]))
+
     def E(self, locations):
         """
         Just plain old energy between triples.
         locations is an array of triples.
         Outputs a list (same length as 'locations') of energy of each triple.
         """
-        C_sub = self.C[locations[:, 0]]
-        G_sub = self.G[locations[:, 1]]
-        V_sub = self.V[locations[:, 2]]
+        #C_sub = self.C[locations[:, 0]]
+        #G_sub = self.G[locations[:, 1]]
+        #V_sub = self.V[locations[:, 2]]
         # this is for Etype == 'dot'
         # TODO: 
         #   profile speed wrt order
         #   wrt just looping through locations
-        GC_sub = np.einsum('...ij,...j', G_sub, C_sub)
-        energy = -np.einsum('...i,...i', V_sub, GC_sub)
+        #   # yolo
+        # profiling...
+        # V1
+        #GC_sub = np.einsum('...ij,...j', G_sub, C_sub)
+        #energy = -np.einsum('...i,...i', V_sub, GC_sub)
+        # V2
+        #energy = np.empty(shape=(len(locations)))
+        #for i in xrange(len(locations)):
+        #    energy[i] = -np.dot(C_sub[i],np.dot(V_sub[i], G_sub[i]))
+        # V3
+        #VG_sub = np.einsum('...i,...ij', V_sub, G_sub)
+        #energy = -np.einsum('...i,...i', VG_sub, C_sub)
+        # V4
+        #energy = map(lambda triple: -np.dot(self.C[triple[0]], np.dot(self.V[triple[2]], self.G[triple[1]])), locations)
+        #energy = np.array(map(lambda (s, r, t): -np.dot(self.C[s], np.dot(self.V[t], self.G[r])), locations))
+        # V5
+        #energy = map(lambda i: -np.dot(V_sub[i], np.dot(G_sub[i], C_sub[i])), xrange(len(locations)))
+        # V6
+        #energy = linn.amap(self.E_triple, locations)
+        # V7
+        #parmz = []
+        #for triple in locations:
+        #    parmz.append(((self.C, self.G, self.V), triple))
+        #energy = map(silly_energy, parmz)
+        # V8
+        #energy = np.empty(shape=len(locations))
+        #for (i, triple) in enumerate(locations):
+        #    energy[i] = self.E_triple(triple)
+        # V9
+        energy = np.empty(shape=len(locations), dtype=np.float)
+        for (i, triple) in enumerate(locations):
+            energy[i] = -np.dot(self.C[triple[0]], np.dot(self.V[triple[2]], self.G[triple[1]]))
+        # V10
+        #energy = []
+        #for triple in locations:
+        #    energy.append(-np.dot(self.C[triple[0]], np.dot(self.V[triple[2]], self.G[triple[1]])))
         return energy
   
     def sample(self, seed, K):
@@ -287,19 +362,23 @@ class params(object):
         Draws samples from the model, given a (single!) seed.
         (iterates through Gibbs sampling K times)
         """
-        W = self.C.shape[0]
-        R = self.G.shape[0]
+        W = self.W
+        R = self.R
         ss = deepcopy(seed)
         for iteration in xrange(K):
             order = np.random.permutation(3)
             for triple_drop in order:
                 if triple_drop == 0:
-                    locs = np.array([ [i, ss[1], ss[2]] for i in xrange(W) ])
+                    energy = self.E_axis(ss, 'C')
+                    #locs = np.array([ [i, ss[1], ss[2]] for i in xrange(W) ])
                 if triple_drop == 1:
-                    locs = np.array([ [ss[0], i, ss[2]] for i in xrange(R) ])
+                    energy = self.E_axis(ss, 'G')
+                    #locs = np.array([ [ss[0], i, ss[2]] for i in xrange(R) ])
                 if triple_drop == 2:
-                    locs = np.array([ [ss[0], ss[1], i] for i in xrange(W) ])
-                expmE = np.exp(-self.E(locs))
+                    energy = self.E_axis(ss, 'V')
+                    #locs = np.array([ [ss[0], ss[1], i] for i in xrange(W) ])
+                #expmE = np.exp(-self.E(locs))
+                expmE = np.exp(-energy)
                 probs = expmE/np.sum(expmE)
                 samp = np.random.choice(len(probs), p=probs, size=1)[0]
                 ss[triple_drop] = samp
@@ -315,15 +394,16 @@ def log_likelihood(parameters, data):
     """
     WARNING: Probably don't want to do this most of the time.
     """
-    # yolo
-    #return 'NA'
-    W = parameters.W
-    R = parameters.R
-    locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
-    energy = parameters.E(locations).reshape(W, R, W)
-    logZ = np.log(np.sum(np.exp(-energy)))
-    ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
-    return ll
+    if True:
+        return 'NA'
+    else:
+        W = parameters.W
+        R = parameters.R
+        locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
+        energy = parameters.E(locations).reshape(W, R, W)
+        logZ = np.log(np.sum(np.exp(-energy)))
+        ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
+        return ll
 
 def sample_noise(W, R, M):
     """
@@ -444,8 +524,10 @@ def train(training_data, start_parameters, options):
         if len(vali_set) < D:
             vali_set.add(tuple(example))
             continue
-        #if tuple(example) in vali_set:
-        #    continue
+        # yolo...
+        if not W == 5:
+            if tuple(example) in vali_set:
+                continue
         batch[n%B, :] = example
         n += 1
         if not EXACT and n%S == 0:
