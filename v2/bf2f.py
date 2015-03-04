@@ -452,10 +452,10 @@ def train(training_data, start_parameters, options):
             logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy]
             if VERBOSE:
                 for val in logline:
-                    if type(val) == float:
-                        print '\t','%.3f' % val,
-                    else:
+                    if type(val) == str: 
                         print '\t', val,
+                    else:
+                        print '\t','%.3f' % val,
                 print ''
             logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
