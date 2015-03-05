@@ -10,12 +10,13 @@ import sys
 import gzip
 import time
 import re
+from copy import deepcopy
 #import pathos.multiprocessing as mp
 
 # --- CONSTANTS --- #
-EXACT=False
+EXACT=True
 PERSISTENT=True
-VERBOSE=True
+VERBOSE=False
 NOISE=False
 THEANO=False
 if NOISE: EXACT=False
@@ -94,9 +95,9 @@ class params(object):
         self.R = G.shape[0]
         self.d = C.shape[1] - 1
         # weights
-        self.C = C
-        self.G = G
-        self.V = V
+        self.C = deepcopy(C)
+        self.G = deepcopy(G)
+        self.V = deepcopy(V)
         # velocities
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
@@ -403,7 +404,7 @@ def train(training_data, start_parameters, options):
         parameters = params(start_parameters)
     # diagnostic things
     logf = open(name+'_logfile.txt','w')
-    logf.write('n\tt\tll\tde\tme\tve\tre\n')
+    logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\n')
     W = parameters.W
     R = parameters.R
     n = 0
@@ -457,14 +458,14 @@ def train(training_data, start_parameters, options):
                     else:
                         print '\t','%.3f' % val,
                 print ''
+                # get some vector lengths
+                # TODO: make this more elegant
+                see, gee, vee = parameters.get()
+                C_lens = np.linalg.norm(see[random_lox[:, 0], :-1], axis=1)
+                V_lens = np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1)
+                print 'C_lenz:', "%.5f" % np.mean(C_lens), 'V_lenz:', "%.5f" % np.mean(V_lens)
             logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
-            # get some vector lengths
-            # TODO: make this more elegant
-            see, gee, vee = parameters.get()
-            C_lens = np.linalg.norm(see[random_lox[:, 0], :-1], axis=1)
-            V_lens = np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1)
-            print 'C_lenz:', "%.5f" % np.mean(C_lens), 'V_lenz:', "%.5f" % np.mean(V_lens)
         if n%(D*10) == 0:
             parameters.save(name+'_XXX.npy')
     print 'Training done,', n, 'examples seen.'
