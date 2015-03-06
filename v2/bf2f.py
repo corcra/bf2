@@ -14,9 +14,9 @@ from copy import deepcopy
 #import pathos.multiprocessing as mp
 
 # --- CONSTANTS --- #
-EXACT=True
+EXACT=False
 PERSISTENT=True
-VERBOSE=False
+VERBOSE=True
 NOISE=False
 THEANO=False
 if NOISE: EXACT=False
@@ -353,24 +353,20 @@ def batch_gradient(parameters, batch):
         dV_batch[t, :] -= dE_V_batch[i]
     return (dC_batch, dG_batch, dV_batch)
 
-def combine_gradients(delta_data, delta_model, B, M):
+def combine_gradients(delta_data, delta_model, prefactor):
+    B, M):
     """
     Just combines two triples...
     """
-    # TODO: make this logic more clear/move it elsewhere
-    if EXACT:
-        prefactor = float(B)
-    else:
-        prefactor = float(B)/M
     delta_C = delta_data[0] - prefactor*delta_model[0]
     delta_G = delta_data[1] - prefactor*delta_model[1]
     delta_V = delta_data[2] - prefactor*delta_model[2]
     # impose constraints
     delta_C[:, -1] = 0
     delta_V[:, -1] = 0
-    #delta_G[:, -1, :] = 0
+    delta_G[:, -1, :] = 0
     # yolo
-    delta_G[:, :, :] = 0
+    #delta_G[:, :, :] = 0
     return delta_C, delta_G, delta_V
 
 def train(training_data, start_parameters, options):
@@ -427,11 +423,13 @@ def train(training_data, start_parameters, options):
                 for (m, samp) in enumerate(samples):
                     samples[m, :] = parameters.sample(samp, K)
             delta_model = batch_gradient(parameters, samples)
+            prefactor = float(B)/len(samples)
         if n%B == 0 and n > S:
             if EXACT:
                 delta_model = Z_gradient(parameters)
+                prefactor = float(B)
             delta_data = batch_gradient(parameters, batch)
-            delta_params = combine_gradients(delta_data, delta_model, B, len(samples))
+            delta_params = combine_gradients(delta_data, delta_model, prefactor)
             parameters.update(delta_params, alpha, mu)
         if n%D == 0 and n > B and n > S:
             t = time.time() - t0
