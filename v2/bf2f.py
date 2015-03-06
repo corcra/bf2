@@ -14,22 +14,13 @@ from copy import deepcopy
 #import pathos.multiprocessing as mp
 
 # --- CONSTANTS --- #
-EXACT=False
-PERSISTENT=True
 VERBOSE=True
-NOISE=False
 THEANO=False
-if NOISE: EXACT=False
-if EXACT or NOISE: PERSISTENT=False
 if THEANO:
     print 'WARNING: Asking for theano functions, but they are not declared here.'
     from theano import function, shared, scan
     import theano.tensor as tten
     from bf2f_theano_params import *
-print 'EXACT:', str(EXACT)
-print 'PERSISTENT:', str(PERSISTENT)
-print 'NOISE:', str(NOISE)
-print 'THEANO:', str(THEANO)
 # yolo
 #linn = mp.ProcessingPool(5)
 
@@ -365,10 +356,11 @@ def combine_gradients(delta_data, delta_model, prefactor):
     delta_V[:, -1] = 0
     delta_G[:, -1, :] = 0
     # yolo
-    #delta_G[:, :, :] = 0
+    delta_G[:, :, :] = 0
     return delta_C, delta_G, delta_V
 
-def train(training_data, start_parameters, options):
+def train(training_data, start_parameters, options,
+          EXACT=False, PERSISTENT=True, NOISE=False):
     """
     Perform (stochastic) gradient ascent on the parameters.
     INPUTS:
@@ -379,6 +371,8 @@ def train(training_data, start_parameters, options):
         parameters      triple of (C, G, V)
         [[ some measure of convergence ]]
     """
+    if NOISE: EXACT=False
+    if EXACT or NOISE: PERSISTENT=False
     # unwrap options
     B = options['batch_size']
     S = options['sampling_rate']
