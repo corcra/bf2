@@ -354,7 +354,6 @@ def batch_gradient(parameters, batch):
     return (dC_batch, dG_batch, dV_batch)
 
 def combine_gradients(delta_data, delta_model, prefactor):
-    B, M):
     """
     Just combines two triples...
     """
