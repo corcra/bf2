@@ -14,7 +14,7 @@ from copy import deepcopy
 #import pathos.multiprocessing as mp
 
 # --- CONSTANTS --- #
-VERBOSE=True
+VERBOSE=False
 THEANO=False
 if THEANO:
     print 'WARNING: Asking for theano functions, but they are not declared here.'
@@ -459,5 +459,5 @@ def train(training_data, start_parameters, options,
             logf.flush()
         if n%(D*10) == 0:
             parameters.save(name+'_XXX.npy')
-    print 'Training done,', n, 'examples seen.'
+    if VERBOSE: print 'Training done,', n, 'examples seen.'
     return parameters
