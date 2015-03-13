@@ -14,7 +14,6 @@ from copy import deepcopy
 #import pathos.multiprocessing as mp
 
 # --- CONSTANTS --- #
-VERBOSE=False
 THEANO=False
 if THEANO:
     print 'WARNING: Asking for theano functions, but they are not declared here.'
@@ -359,8 +358,19 @@ def combine_gradients(delta_data, delta_model, prefactor):
     delta_G[:, :, :] = 0
     return delta_C, delta_G, delta_V
 
+def permute_batch(word_perm, rela_perm, batch):
+    """
+    This function will take a list of triples and a pair of KNOWN permutations
+    (W -> W', R -> R')
+    and output triples after applying the transformation.
+    """
+    mapped_batch = np.empty(shape=batch.shape)
+    for (i, (s, r, t)) in enumerate(batch):
+        mapped_batch[i] = (word_perm[s], rela_perm[r], word_perm[t])
+    return mapped_batch
+
 def train(training_data, start_parameters, options,
-          EXACT=False, PERSISTENT=True, NOISE=False):
+          EXACT=False, PERSISTENT=True, NOISE=False, VERBOSE=True):
     """
     Perform (stochastic) gradient ascent on the parameters.
     INPUTS:
@@ -393,20 +403,32 @@ def train(training_data, start_parameters, options,
         parameters = params(start_parameters)
     # diagnostic things
     logf = open(name+'_logfile.txt','w')
-    logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\n')
+    logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\tperm_energy\n')
     W = parameters.W
     R = parameters.R
+    # a fixed permutation, for testing my strange likelihood ratio thing
+    W_perm = dict(enumerate(np.random.permutation(W)))
+    R_perm = dict(enumerate(np.random.permutation(R)))
+    # record sampling frequencies
+    #sampled_counts = dict((i, 0) for i in xrange(W))
     n = 0
     t0 = time.time()
     for example in training_data:
         if len(vali_set) < D:
             vali_set.add(tuple(example))
             continue
-        # yolo...
+        if len(vali_set) == D:
+            perm_vali_batch = permute_batch(W_perm, R_perm, np.array(list(vali_set)))
+        # explanation for this:
+        # in W=5 dataset, if you exclude vali_set, you lose a significant %
+        # of the training data...
         if not W == 5:
             if tuple(example) in vali_set:
                 continue
         batch[n%B, :] = example
+        #yolo
+        sampled_counts[example[0]] +=1
+        sampled_counts[example[2]] +=1
         n += 1
         if not EXACT and n%S == 0:
             if NOISE:
@@ -414,7 +436,13 @@ def train(training_data, start_parameters, options,
             else:
                 if not PERSISTENT: samples[:, :] = batch[np.random.choice(B, M), :]
                 for (m, samp) in enumerate(samples):
-                    samples[m, :] = parameters.sample(samp, K)
+                    sampled_triple = parameters.sample(samp, K)
+                    samples[m, :] = sampled_triple
+                    # yolo
+                    #sampled_counts[sampled_triple[0]] += 1
+                    #sampled_counts[sampled_triple[2]] += 1
+            # yolo
+            #print sampled_counts.values()
             delta_model = batch_gradient(parameters, samples)
             prefactor = float(B)/len(samples)
         if n%B == 0 and n > S:
@@ -427,7 +455,8 @@ def train(training_data, start_parameters, options,
         if n%D == 0 and n > B and n > S:
             t = time.time() - t0
             if calculate_ll:
-                ll = log_likelihood(parameters, training_data)
+                #ll = log_likelihood(parameters, training_data)
+                ll = log_likelihood(parameters, vali_set)
             else:
                 ll = 'NA'
             data_energy = np.mean(parameters.E(batch))
@@ -436,12 +465,16 @@ def train(training_data, start_parameters, options,
                                       np.random.randint(0, R, 100),
                                       np.random.randint(0, W, 100)))
             rand_energy = np.mean(parameters.E(random_lox))
+            # so this is different to the rand, cause it's a permuted version of the validation set
+            perm_energy = np.mean(parameters.E(perm_vali_batch))
             if PERSISTENT:
                 model_energy = np.mean(parameters.E(samples))
             else:
                 model_energy = 'NA'
             # record to logfile
-            logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy]
+            logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy, perm_energy]
+            # wayo
+            print vali_energy/perm_energy
             if VERBOSE:
                 for val in logline:
                     if type(val) == str: 
