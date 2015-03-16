@@ -427,8 +427,8 @@ def train(training_data, start_parameters, options,
                 continue
         batch[n%B, :] = example
         #yolo
-        sampled_counts[example[0]] +=1
-        sampled_counts[example[2]] +=1
+        #sampled_counts[example[0]] +=1
+        #sampled_counts[example[2]] +=1
         n += 1
         if not EXACT and n%S == 0:
             if NOISE:
@@ -455,8 +455,8 @@ def train(training_data, start_parameters, options,
         if n%D == 0 and n > B and n > S:
             t = time.time() - t0
             if calculate_ll:
-                #ll = log_likelihood(parameters, training_data)
-                ll = log_likelihood(parameters, vali_set)
+                ll = log_likelihood(parameters, training_data)
+                #ll = log_likelihood(parameters, vali_set)
             else:
                 ll = 'NA'
             data_energy = np.mean(parameters.E(batch))
