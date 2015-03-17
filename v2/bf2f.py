@@ -493,4 +493,4 @@ def train(training_data, start_parameters, options,
         if n%(D*10) == 0:
             parameters.save(name+'_XXX.npy')
     if VERBOSE: print 'Training done,', n, 'examples seen.'
-    return parameters
+    return parameters, vali_set
