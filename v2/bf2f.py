@@ -484,8 +484,9 @@ def train(training_data, start_parameters, options,
                 # TODO: make this more elegant
                 see, gee, vee = parameters.get()
                 C_lens = np.linalg.norm(see[random_lox[:, 0], :-1], axis=1)
+                G_lens = np.linalg.norm(gee[random_lox[:, 1], :-1], axis=(1,2))
                 V_lens = np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1)
-                print 'C_lenz:', "%.5f" % np.mean(C_lens), 'V_lenz:', "%.5f" % np.mean(V_lens)
+                print 'C_lenz:', "%.5f" % np.mean(C_lens), 'G_lenz:', "%.5f" % np.mean(G_lens), 'V_lenz:', "%.5f" % np.mean(V_lens)
             logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
         if n%(D*10) == 0:
