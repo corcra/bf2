@@ -355,7 +355,7 @@ def combine_gradients(delta_data, delta_model, prefactor):
     delta_V[:, -1] = 0
     delta_G[:, -1, :] = 0
     # yolo
-    delta_G[:, :, :] = 0
+    #delta_G[:, :, :] = 0
     return delta_C, delta_G, delta_V
 
 def permute_batch(word_perm, rela_perm, batch):
@@ -473,8 +473,6 @@ def train(training_data, start_parameters, options,
                 model_energy = 'NA'
             # record to logfile
             logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy, perm_energy]
-            # wayo
-            print vali_energy/perm_energy
             if VERBOSE:
                 for val in logline:
                     if type(val) == str: 
