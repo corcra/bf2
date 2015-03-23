@@ -73,7 +73,7 @@ class params(object):
     Parameter object.
     Contains C, G, V and velocities for all.
     """
-    def __init__(self, initial_parameters):
+    def __init__(self, initial_parameters, fix_words=False, fix_relas=False):
         C, G, V = initial_parameters
         if C.shape != V.shape:
             raise ValueError
@@ -92,6 +92,10 @@ class params(object):
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
         self.V_vel = np.zeros(shape=self.V.shape)
+        # fix some parameters?
+        # (never update these)
+        self.fix_words = fix_words
+        self.fix_relas = fix_relas
 
     def update(self, delta_parameters, alpha, mu):
         """
@@ -102,13 +106,17 @@ class params(object):
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
-        self.C_vel = muC*self.C_vel + (1-muC)*deltaC
-        self.G_vel = muG*self.G_vel + (1-muG)*deltaG
-        self.V_vel = muV*self.V_vel + (1-muV)*deltaV
+        if not self.fix_words:
+            self.C_vel = muC*self.C_vel + (1-muC)*deltaC
+            self.V_vel = muV*self.V_vel + (1-muV)*deltaV
+        if not self.fix_relas:
+            self.G_vel = muG*self.G_vel + (1-muG)*deltaG
         # update parameters
-        self.C += alphaC*self.C_vel
-        self.G += alphaG*self.G_vel
-        self.V += alphaV*self.V_vel
+        if not self.fix_words:
+            self.C += alphaC*self.C_vel
+            self.V += alphaV*self.V_vel
+        if not self.fix_relas:
+            self.G += alphaG*self.G_vel
 
     def grad_E(self, locations):
         """
@@ -397,10 +405,10 @@ def train(training_data, start_parameters, options,
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(M, 3),dtype=np.int)
-    if THEANO:
-        parameters = theano_params(start_parameters)
-    else:
+    if not type(start_parameters) == params:
         parameters = params(start_parameters)
+    else:
+        parameters = start_parameters
     # diagnostic things
     logf = open(name+'_logfile.txt','w')
     logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\tperm_energy\n')
@@ -493,4 +501,4 @@ def train(training_data, start_parameters, options,
             parameters.save(name+'_XXX.npy')
     if VERBOSE: print 'Training done,', n, 'examples seen.'
     parameters.save(name+'_XXX.npy')
-    return parameters, vali_set
+    return vali_set
