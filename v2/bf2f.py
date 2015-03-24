@@ -363,7 +363,7 @@ def combine_gradients(delta_data, delta_model, prefactor):
     delta_V[:, -1] = 0
     delta_G[:, -1, :] = 0
     # yolo
-    #delta_G[:, :, :] = 0
+    delta_G[0, :, :] = 0
     return delta_C, delta_G, delta_V
 
 def permute_batch(word_perm, rela_perm, batch):
