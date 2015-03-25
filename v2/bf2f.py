@@ -3,9 +3,6 @@
 
 import numpy as np
 from copy import deepcopy
-import matplotlib as mpl
-mpl.use('Agg')
-import matplotlib.pyplot as plt
 import sys
 import gzip
 import time
