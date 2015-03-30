@@ -409,7 +409,7 @@ def train(training_data, start_parameters, options,
         parameters = start_parameters
     # diagnostic things
     logf = open(name+'_logfile.txt','w')
-    logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\tperm_energy\n')
+    logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\tperm_energy\tC_lens\tG_lens\tV_lens\n')
     W = parameters.W
     R = parameters.R
     # a fixed permutation, for testing my strange likelihood ratio thing
@@ -478,23 +478,22 @@ def train(training_data, start_parameters, options,
                 model_energy = np.mean(parameters.E(samples))
             else:
                 model_energy = 'NA'
+            # get some vector lengths
+            # TODO: make this more elegant
+            see, gee, vee = parameters.get()
+            C_lens = np.mean(np.linalg.norm(see[random_lox[:, 0], :-1], axis=1))
+            G_lens = np.mean(np.linalg.norm(gee[random_lox[:, 1], :-1], axis=(1,2)))
+            V_lens = np.mean(np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1))
             # record to logfile
-            logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy, perm_energy]
+            logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy, perm_energy, C_lens, G_lens, V_lens]
             if VERBOSE:
                 for val in logline:
                     if type(val) == str: 
                         print '\t', val,
                     else:
                         print '\t','%.3f' % val,
-                print ''
-                # get some vector lengths
-                # TODO: make this more elegant
-                see, gee, vee = parameters.get()
-                C_lens = np.linalg.norm(see[random_lox[:, 0], :-1], axis=1)
-                G_lens = np.linalg.norm(gee[random_lox[:, 1], :-1], axis=(1,2))
-                V_lens = np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1)
-                print 'C_lenz:', "%.5f" % np.mean(C_lens), 'G_lenz:', "%.5f" % np.mean(G_lens), 'V_lenz:', "%.5f" % np.mean(V_lens)
-            logf.write('\t'.join(map(str, logline))+'\n')
+                print '\nC_lenz:', "%.5f" % C_lens, 'G_lenz:', "%.5f" % G_lens, 'V_lenz:', "%.5f" % V_lens
+                logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
         if n%(D*10) == 0:
             parameters.save(name+'_XXX.npy')
