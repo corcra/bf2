@@ -399,6 +399,7 @@ def train(training_data, start_parameters, options,
     name = options['name']
     # initialise
     vali_set = set()
+    vali_set_size = int(D/10)
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(M, 3),dtype=np.int)
@@ -419,16 +420,17 @@ def train(training_data, start_parameters, options,
     n = 0
     t0 = time.time()
     for example in training_data:
-        if len(vali_set) < D:
+        if len(vali_set) < vali_set_size:
             vali_set.add(tuple(example))
             continue
-        if len(vali_set) == D:
+        if len(vali_set) == vali_set_size:
             perm_vali_batch = permute_batch(W_perm, R_perm, np.array(list(vali_set)))
         # explanation for this:
         # in W=5 dataset, if you exclude vali_set, you lose a significant %
         # of the training data...
         if not W == 5:
             if tuple(example) in vali_set:
+                print 'in valiset...'
                 continue
         batch[n%B, :] = example
         #yolo
