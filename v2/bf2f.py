@@ -430,7 +430,6 @@ def train(training_data, start_parameters, options,
         # of the training data...
         if not W == 5:
             if tuple(example) in vali_set:
-                print 'in valiset...'
                 continue
         batch[n%B, :] = example
         #yolo
