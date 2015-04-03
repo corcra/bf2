@@ -376,6 +376,16 @@ def permute_batch(word_perm, rela_perm, batch):
         mapped_batch[i] = (word_perm[s], rela_perm[r], word_perm[t])
     return mapped_batch
 
+def update_learning_rate(alpha0, tau, t):
+    """
+    Update learning rate according to some schedule.
+    """
+    alpha_new = [alpha0[0], alpha0[1], alpha0[2]]
+    for z in xrange(3):
+        if not tau[z] == 0:
+            alpha_new[z] = alpha0[z]/(1+float(t)/tau[z])
+    return alpha_new
+        
 def train(training_data, start_parameters, options,
           EXACT=False, PERSISTENT=True, NOISE=False, VERBOSE=True):
     """
@@ -397,7 +407,7 @@ def train(training_data, start_parameters, options,
     D = options['diagnostics_rate']
     K = options['gibbs_iterations']
     calculate_ll = options['calculate_ll']
-    alpha, mu = options['alpha'], options['mu']
+    alpha0, mu, tau = options['alpha'], options['mu'], options['tau']
     name = options['name']
     # initialise
     vali_set = set()
@@ -454,6 +464,10 @@ def train(training_data, start_parameters, options,
             delta_model = batch_gradient(parameters, samples)
             prefactor = float(B)/len(samples)
         if n%B == 0 and n > S:
+            alpha = update_learning_rate(alpha0, tau, n/B)
+            # yolo
+            print alpha
+            # yolo
             if EXACT:
                 delta_model = Z_gradient(parameters)
                 prefactor = float(B)
