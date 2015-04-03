@@ -23,13 +23,14 @@ if (da$model_energy[1] == "NA"){
 }
 el<-melt(energies,id="n")
 ggplot(el, aes(x=n, y=value, color=variable))+geom_point(cex=1.2, alpha=0.8)+xlab("# training examples seen")+ylab("mean energy of batch")+ggtitle(fname)+scale_color_manual(values=colz)
-#+ylim(-100,10)
-ggsave(paste0(fname,"_energies.pdf"))
+#ggsave(paste0(fname,"_energies.pdf"))
+ggsave(paste0(fname,"_energies.png"))
 
 # log likelihood
 dll<-da[,c("n","ll")]
 ggplot(dll, aes(x=n, y=ll))+geom_point()+ggtitle(fname)
-ggsave(paste0(fname,"_ll.pdf"))
+#ggsave(paste0(fname,"_ll.pdf"))
+ggsave(paste0(fname,"_ll.png"))
 
 # compare ll with weirdratio
 #ratio<-abs(da$valiset_energy/da$perm_energy-(da$valiset_energy/da$perm_energy)[1])
@@ -46,4 +47,5 @@ ggsave(paste0(fname,"_ll.pdf"))
 lens<-da[,c("n", "C_lens", "G_lens", "V_lens")]
 lensl<-melt(lens, id="n")
 ggplot(lensl, aes(x=n, y=value, color=variable))+geom_point(cex=1.2, alpha=0.8)+xlab("# training examples seen")+ylab("mean length of sample of vectors/matrices")+ggtitle(fname)
-ggsave(paste0(fname,"_lens.pdf"))
+#ggsave(paste0(fname,"_lens.pdf"))
+ggsave(paste0(fname,"_lens.png"))
