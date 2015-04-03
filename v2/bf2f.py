@@ -2,6 +2,8 @@
 # Skeleton!
 
 import numpy as np
+# DO NOT PLAY NICE WITH NANS
+np.seterr(all='raise')
 from copy import deepcopy
 import sys
 import gzip
