@@ -465,9 +465,6 @@ def train(training_data, start_parameters, options,
             prefactor = float(B)/len(samples)
         if n%B == 0 and n > S:
             alpha = update_learning_rate(alpha0, tau, n/B)
-            # yolo
-            print alpha
-            # yolo
             if EXACT:
                 delta_model = Z_gradient(parameters)
                 prefactor = float(B)
@@ -508,7 +505,7 @@ def train(training_data, start_parameters, options,
                     else:
                         print '\t','%.3f' % val,
                 print '\nC_lenz:', "%.5f" % C_lens, 'G_lenz:', "%.5f" % G_lens, 'V_lenz:', "%.5f" % V_lens
-                logf.write('\t'.join(map(str, logline))+'\n')
+            logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
         if n%(D*10) == 0:
             parameters.save(name+'_XXX.npy')
