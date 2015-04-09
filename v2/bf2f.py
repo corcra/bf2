@@ -1,5 +1,5 @@
 #bin/python
-# Skeleton!
+# Main functions/classes for bri-focal v2.
 
 import numpy as np
 # DO NOT PLAY NICE WITH NANS
@@ -361,7 +361,6 @@ def combine_gradients(delta_data, delta_model, prefactor):
     delta_C[:, -1] = 0
     delta_V[:, -1] = 0
     delta_G[:, -1, :] = 0
-    # yolo
     delta_G[0, :, :] = 0
     return delta_C, delta_G, delta_V
 
@@ -507,6 +506,14 @@ def train(training_data, start_parameters, options,
                 print '\nC_lenz:', "%.5f" % C_lens, 'G_lenz:', "%.5f" % G_lens, 'V_lenz:', "%.5f" % V_lens
             logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
+            # yolo
+            if np.random.random() < 0.2:
+                anim_fo = open('animations/anim_'+str(n).zfill(5)+'.txt','w')
+                for w in xrange(W):
+                    #anim_fo.write('C'+str(w)+' '+' '.join(map(str, parameters.C[w, :-1]))+'\n')
+                    anim_fo.write('V'+str(w)+' '+' '.join(map(str, parameters.V[w, :-1]))+'\n')
+                anim_fo.close()
+            # endyolo
         if n%(D*10) == 0:
             parameters.save(name+'_XXX.npy')
     if VERBOSE: print 'Training done,', n, 'examples seen.'
