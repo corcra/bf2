@@ -508,11 +508,12 @@ def train(training_data, start_parameters, options,
             logf.flush()
             # yolo
             if np.random.random() < 0.2:
-                anim_fo = open('animations/anim_'+str(n).zfill(5)+'.txt','w')
-                for w in xrange(W):
-                    #anim_fo.write('C'+str(w)+' '+' '.join(map(str, parameters.C[w, :-1]))+'\n')
-                    anim_fo.write('V'+str(w)+' '+' '.join(map(str, parameters.V[w, :-1]))+'\n')
-                anim_fo.close()
+                for r in xrange(R):
+                    anim_fo = open('animations/anim_R'+str(r)+'_'+str(n).zfill(5)+'.txt','w')
+                    for w in xrange(W):
+                        #anim_fo.write('C'+str(w)+' '+' '.join(map(str, parameters.C[w, :-1]))+'\n')
+                        anim_fo.write('V'+str(w)+' '+' '.join(map(str, np.dot(parameters.G[r, :, :],parameters.V[w, :])[:-1]))+'\n')
+                    anim_fo.close()
             # endyolo
         if n%(D*10) == 0:
             parameters.save(name+'_XXX.npy')
