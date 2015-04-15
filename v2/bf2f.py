@@ -410,7 +410,8 @@ def train(training_data, start_parameters, options,
     name = options['name']
     # initialise
     vali_set = set()
-    vali_set_size = int(D/10)
+    # yolo
+    vali_set_size = D
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(M, 3),dtype=np.int)
