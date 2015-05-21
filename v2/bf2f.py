@@ -4,6 +4,7 @@
 import numpy as np
 # DO NOT PLAY NICE WITH NANS
 np.seterr(all='raise')
+np.seterr(under='warn')
 from copy import deepcopy
 import sys
 import gzip
@@ -408,10 +409,12 @@ def train(training_data, start_parameters, options,
     calculate_ll = options['calculate_ll']
     alpha0, mu, tau = options['alpha'], options['mu'], options['tau']
     name = options['name']
+    try:
+        valiset_size = options['vali_set_size']
+    except KeyError:
+        vali_set_size = D
     # initialise
     vali_set = set()
-    # yolo
-    vali_set_size = D
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(M, 3),dtype=np.int)
