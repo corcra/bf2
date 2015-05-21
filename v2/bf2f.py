@@ -165,7 +165,7 @@ class params(object):
         """
         return -np.dot(self.V[triple[2]], np.dot(self.G[triple[1]], self.C[triple[0]]))
 
-    def E(self, locations):
+    def E(self, locations=None):
         """
         Just plain old energy between triples.
         locations is an array of triples.
