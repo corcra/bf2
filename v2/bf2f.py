@@ -207,6 +207,10 @@ class params(object):
         #for (i, triple) in enumerate(locations):
         #    energy[i] = self.E_triple(triple)
         # V9
+        if locations == None:
+            W = parameters.W
+            R = parameters.R
+            locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
         energy = np.empty(shape=len(locations), dtype=np.float)
         for (i, triple) in enumerate(locations):
             energy[i] = -np.dot(self.C[triple[0]], np.dot(self.V[triple[2]], self.G[triple[1]]))
@@ -410,7 +414,7 @@ def train(training_data, start_parameters, options,
     alpha0, mu, tau = options['alpha'], options['mu'], options['tau']
     name = options['name']
     try:
-        valiset_size = options['vali_set_size']
+        vali_set_size = options['vali_set_size']
     except KeyError:
         vali_set_size = D
     # initialise
