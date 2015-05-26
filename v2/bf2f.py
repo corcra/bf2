@@ -73,7 +73,8 @@ class params(object):
     Parameter object.
     Contains C, G, V and velocities for all.
     """
-    def __init__(self, initial_parameters, fix_words=False, fix_relas=False):
+    def __init__(self, initial_parameters, vocab=None,
+                 fix_words=False, fix_relas=False, trans_rela=False):
         C, G, V = initial_parameters
         if C.shape != V.shape:
             raise ValueError
@@ -84,6 +85,14 @@ class params(object):
         self.W = C.shape[0]
         self.R = G.shape[0]
         self.d = C.shape[1] - 1
+        # vocab
+        try:
+            self.words = vocab['words']
+            self.relas = vocab['relas']
+        except TypeError:
+            # no vocab
+            self.words = map(str, range(self.W))
+            self.relas = map(str, range(self.R))
         # weights
         self.C = deepcopy(C)
         self.G = deepcopy(G)
@@ -96,6 +105,8 @@ class params(object):
         # (never update these)
         self.fix_words = fix_words
         self.fix_relas = fix_relas
+        # special type of relationship (translations only)
+        self.trans_rela = trans_rela
 
     def update(self, delta_parameters, alpha, mu):
         """
@@ -116,7 +127,11 @@ class params(object):
             self.C += alphaC*self.C_vel
             self.V += alphaV*self.V_vel
         if not self.fix_relas:
-            self.G += alphaG*self.G_vel
+            if self.trans_rela:
+                # only update the final column of G
+                self.G[:, :, -1] = alphaG*self.G_vel[:, :, -1]
+            else:
+                self.G += alphaG*self.G_vel
 
     def grad_E(self, locations):
         """
@@ -208,8 +223,8 @@ class params(object):
         #    energy[i] = self.E_triple(triple)
         # V9
         if locations == None:
-            W = parameters.W
-            R = parameters.R
+            W = self.W
+            R = self.R
             locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
         energy = np.empty(shape=len(locations), dtype=np.float)
         for (i, triple) in enumerate(locations):
@@ -253,14 +268,17 @@ class params(object):
         """
         return (self.C, self.G, self.V)
 
-    def save(self, filename, words=None):
+    def save(self, filename):
         """
         Method to save the parameters to file.
         """
         if '.npy' in filename:
-            np.save(re.sub('XXX','C',filename),self.C)
-            np.save(re.sub('XXX','G',filename),self.G)
-            np.save(re.sub('XXX','V',filename),self.V)
+            C_dict = dict(zip(self.words, self.C[:,:-1]))
+            G_dict = dict(zip(self.relas, self.G))
+            V_dict = dict(zip(self.words, self.V[:, :-1]))
+            np.save(re.sub('XXX','C',filename),C_dict)
+            np.save(re.sub('XXX','G',filename),G_dict)
+            np.save(re.sub('XXX','V',filename),V_dict)
         elif '.txt' in filename:
             fC = open(re.sub('XXX','C',filename), 'w')
             fG = open(re.sub('XXX','G',filename), 'w')
@@ -269,7 +287,7 @@ class params(object):
             fV.write(str(self.W)+' '+str(self.C.shape[1]-1)+'\n')
             for i in xrange(self.W):
                 try:
-                    word = words[i]
+                    word = self.words[i]
                 except TypeError:
                     word = 'word_'+str(i)
                 fC.write(word+' '+' '.join(map(str, self.C[i,:-1]))+'\n')
