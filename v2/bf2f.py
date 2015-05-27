@@ -287,6 +287,7 @@ class params(object):
             fG = open(re.sub('XXX','G',filename), 'w')
             fV = open(re.sub('XXX','V',filename), 'w')
             fC.write(str(self.W)+' '+str(self.C.shape[1]-1)+'\n')
+            fG.write(str(self.R)+' '+str(self.C.shape[1]-1)+'\n')
             fV.write(str(self.W)+' '+str(self.C.shape[1]-1)+'\n')
             for i in xrange(self.W):
                 try:
@@ -540,13 +541,13 @@ def train(training_data, start_parameters, options,
             logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
             # yolo
-            if np.random.random() < 0.2:
-                for r in xrange(R):
-                    anim_fo = open('animations/anim_R'+str(r)+'_'+str(n).zfill(5)+'.txt','w')
-                    for w in xrange(W):
-                        #anim_fo.write('C'+str(w)+' '+' '.join(map(str, parameters.C[w, :-1]))+'\n')
-                        anim_fo.write('V'+str(w)+' '+' '.join(map(str, np.dot(parameters.G[r, :, :],parameters.V[w, :])[:-1]))+'\n')
-                    anim_fo.close()
+            #if np.random.random() < 0.2:
+            #    for r in xrange(R):
+            #        anim_fo = open('animations/anim_R'+str(r)+'_'+str(n).zfill(5)+'.txt','w')
+            #        for w in xrange(W):
+            #            #anim_fo.write('C'+str(w)+' '+' '.join(map(str, parameters.C[w, :-1]))+'\n')
+            #            anim_fo.write('V'+str(w)+' '+' '.join(map(str, np.dot(parameters.G[r, :, :],parameters.V[w, :])[:-1]))+'\n')
+            #        anim_fo.close()
             # endyolo
         if n%(D*10) == 0:
             parameters.save(name+'_XXX.npy')
