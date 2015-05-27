@@ -23,6 +23,18 @@ if THEANO:
 # yolo
 #linn = mp.ProcessingPool(5)
 
+# --- functions ! --- #
+def clean_word(word):
+    # lowercase
+    word1 = word.lower()
+    # remove: . , ( )
+    word2 = re.sub('[,\.()""]', '', word1)
+    # replace digits with NUM
+    word3 = re.sub('[\d#]+', '#', word2)
+    # strip trailing space
+    word4 = word3.rstrip(' ')
+    return word4
+
 class data_stream(object):
     """
     Class for data stream.
