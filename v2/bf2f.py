@@ -109,9 +109,6 @@ class params(object):
         try:
             self.words = vocab['words']
             self.relas = vocab['relas']
-            print 'yolo! success!'
-            print self.words[0]
-            sys.exit()
         except TypeError:
             # no vocab
             self.words = map(str, range(self.W))
