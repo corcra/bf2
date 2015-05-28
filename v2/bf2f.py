@@ -477,7 +477,6 @@ def train(training_data, start_parameters, options,
         parameters = start_parameters
     # diagnostic things
     logf = open(name+'_logfile.txt','a')
-    logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\tperm_energy\tC_lens\tG_lens\tV_lens\n')
     W = parameters.W
     R = parameters.R
     # a fixed permutation, for testing my strange likelihood ratio thing
