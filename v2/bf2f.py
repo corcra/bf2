@@ -1,4 +1,4 @@
-#bin/python
+#!/bin/python
 # Main functions/classes for bri-focal v2.
 
 import numpy as np
