@@ -63,7 +63,10 @@ class data_stream(object):
         """
         The first line of the data file should contain W, R.
         """
-        fi = gzip.open(self.path,'r')
+        if '.gz' in self.path:
+            fi = gzip.open(self.path,'r')
+        else:
+            fi = open(self.path,'r')
         header = fi.readline()
         fi.close()
         values = map(int, header.split())
