@@ -80,7 +80,10 @@ class data_stream(object):
         Just suck it all in!
         """
         traindata = [[0, 0, 0]]
-        fi = gzip.open(self.path, 'r')
+        if '.gz' in self.path:
+            fi = gzip.open(self.path, 'r')
+        else:
+            fi = open(self.path, 'r')
         header = fi.readline()
         for line in fi:
             s, r, t = map(int, line.split())
@@ -473,7 +476,7 @@ def train(training_data, start_parameters, options,
     else:
         parameters = start_parameters
     # diagnostic things
-    logf = open(name+'_logfile.txt','w')
+    logf = open(name+'_logfile.txt','a')
     logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\tperm_energy\tC_lens\tG_lens\tV_lens\n')
     W = parameters.W
     R = parameters.R
