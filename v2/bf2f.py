@@ -47,7 +47,10 @@ class data_stream(object):
         """
         Just spits out lines from the file.
         """
-        fi = gzip.open(self.path,'r')
+        if '.gz' in self.path:
+            fi = gzip.open(self.path,'r')
+        else:
+            fi = open(self.path,'r')
         header = fi.readline()
         while True:
             line = fi.readline()
@@ -103,6 +106,9 @@ class params(object):
         try:
             self.words = vocab['words']
             self.relas = vocab['relas']
+            print 'yolo! success!'
+            print self.words[0]
+            sys.exit()
         except TypeError:
             # no vocab
             self.words = map(str, range(self.W))
