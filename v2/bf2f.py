@@ -35,6 +35,7 @@ def clean_word(word):
     word4 = word3.rstrip(' ')
     return word4
 
+# --- data stream --- #
 class data_stream(object):
     """
     Class for data stream.
@@ -80,6 +81,7 @@ class data_stream(object):
             traindata.append([s, r, t])
         return np.array(traindata[1:])
 
+# --- parameters object --- #
 class params(object):
     """
     Parameter object.
