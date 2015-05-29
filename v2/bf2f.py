@@ -98,28 +98,34 @@ class params(object):
     """
     def __init__(self, initial_parameters, vocab=None,
                  fix_words=False, fix_relas=False, trans_rela=False):
-        C, G, V = initial_parameters
-        if C.shape != V.shape:
-            raise ValueError
-        if G.shape[1] != C.shape[1]:
-            raise ValueError
-        if G.shape[2] != C.shape[1]:
-            raise ValueError
-        self.W = C.shape[0]
-        self.R = G.shape[0]
-        self.d = C.shape[1] - 1
-        # vocab
-        try:
-            self.words = vocab['words']
-            self.relas = vocab['relas']
-        except TypeError:
-            # no vocab
-            self.words = map(str, range(self.W))
-            self.relas = map(str, range(self.R))
-        # weights
-        self.C = deepcopy(C)
-        self.G = deepcopy(G)
-        self.V = deepcopy(V)
+        if type(initial_parameters) == str:
+            # assume a PATH has been given
+            params_path = initial_parameters
+            self.load(params_path)
+        elif type(initial_parameters) == tuple:
+            # assume a triple of parameters has been given
+            C, G, V = initial_parameters
+            if C.shape != V.shape:
+                raise ValueError
+            if G.shape[1] != C.shape[1]:
+                raise ValueError
+            if G.shape[2] != C.shape[1]:
+                raise ValueError
+            self.W = C.shape[0]
+            self.R = G.shape[0]
+            self.d = C.shape[1] - 1
+            # vocab
+            try:
+                self.words = vocab['words']
+                self.relas = vocab['relas']
+            except TypeError:
+                # no vocab
+                self.words = map(str, range(self.W))
+                self.relas = map(str, range(self.R))
+            # weights
+            self.C = deepcopy(C)
+            self.G = deepcopy(G)
+            self.V = deepcopy(V)
         # velocities
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
@@ -330,6 +336,84 @@ class params(object):
             fG.close()
         return True
 
+    def load(self, filename):
+        """
+        Method to load parameters from a file, as encoded by 'save'
+        Please note that, at present, this can't know ordering
+         - that is, it may assign words new indices
+        Which means it is not necessarily compatible with arbitrary training data,
+        or even the training data used to create the parameters that are being loaded.
+        To fix this, save method must also record these indices more faithfully...
+        For .txt the order in the file is actually faithful, but for npy, 
+        since they are saved as dictionaries, we cannot guarantee this.
+        Sorry!
+        """
+        if not 'XXX' in filename:
+            print 'WARNING: Load expects an XXX in the filename. Fixed that for you.'
+            filename = filename+'_XXX'
+        if '.npy' in filename:
+            C_dict = np.load(re.sub('XXX','C',filename)).item()
+            G_dict = np.load(re.sub('XXX','G',filename)).item()
+            V_dict = np.load(re.sub('XXX','V',filename)).item()
+            assert set(C_dict.keys()) == set(V_dict.keys())
+            words = list(C_dict.keys())
+            relas = list(G_dict.keys())
+            W = len(words)
+            R = len(relas)
+            d = len(C_dict[words[0]])
+            # create empty matrices
+            C = np.ones(shape=(W, d+1))
+            V = np.ones(shape=(W, d+1))
+            G = np.empty(shape=(R, d+1, d+1))
+            for (i, word) in enumerate(words):
+                C[i, :-1] = C_dict[word]
+                V[i, :-1] = V_dict[word]
+            for (i, rela) in enumerate(relas):
+                G[i:, :, :] = G_dict[rela]
+        elif '.txt' in filename:
+            fC = open(re.sub('XXX','C',filename), 'r')
+            fG = open(re.sub('XXX','G',filename), 'r')
+            fV = open(re.sub('XXX','V',filename), 'r')
+            C_header = fC.readline()
+            V_header = fV.readline()
+            assert C_header == V_header
+            W, d = map(int, C_header.split())
+            G_header = fG.readline()
+            R, d = map(int, G_header.split())
+            # create empty matrices
+            C = np.ones(shape=(W, d+1))
+            V = np.ones(shape=(W, d+1))
+            G = np.zeros(shape=(R, d+1, d+1))
+            words = []
+            for (i, line) in enumerate(fC):
+                sl = line.split()
+                word = sl[0]
+                vec = np.array(map(np.float, sl[1:]))
+                words.append(word)
+                C[i, :-1] = vec[:]
+            for line in fV:
+                sl = line.split()
+                word = sl[0]
+                vec = np.array(map(np.float, sl[1:]))
+                i = words.index(word)
+                V[i, :-1] = vec[:]
+            relas = []
+            for (i, line) in enumerate(fG):
+                sl = line.split()
+                rela = sl[0]
+                matrix = np.array(map(np.float, sl[1:])).reshape(d, d+1)
+                G[i, :-1, :] = matrix[:, :]
+                G[i, -1, -1] = 1
+        self.W = W
+        self.R = R
+        self.d = d
+        self.words = words
+        self.relas = relas
+        self.C = deepcopy(C)
+        self.G = deepcopy(G)
+        self.V = deepcopy(V)
+        return True
+
 def log_likelihood(parameters, data):
     """
     WARNING: Probably don't want to do this most of the time.
@@ -462,6 +546,7 @@ def train(training_data, start_parameters, options,
     calculate_ll = options['calculate_ll']
     alpha0, mu, tau = options['alpha'], options['mu'], options['tau']
     name = options['name']
+    offset = options['offset']
     try:
         vali_set_size = options['vali_set_size']
     except KeyError:
@@ -552,7 +637,7 @@ def train(training_data, start_parameters, options,
             G_lens = np.mean(np.linalg.norm(gee[random_lox[:, 1], :-1], axis=(1,2)))
             V_lens = np.mean(np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1))
             # record to logfile
-            logline = [n, t, ll, data_energy, model_energy, vali_energy, rand_energy, perm_energy, C_lens, G_lens, V_lens]
+            logline = [n + offset, t, ll, data_energy, model_energy, vali_energy, rand_energy, perm_energy, C_lens, G_lens, V_lens]
             if VERBOSE:
                 for val in logline:
                     if type(val) == str: 
@@ -575,4 +660,4 @@ def train(training_data, start_parameters, options,
             parameters.save(name+'_XXX.npy')
     if VERBOSE: print 'Training done,', n, 'examples seen.'
     parameters.save(name+'_XXX.npy')
-    return vali_set
+    return vali_set, n
