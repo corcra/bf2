@@ -96,7 +96,7 @@ class params(object):
     Parameter object.
     Contains C, G, V and velocities for all.
     """
-    def __init__(self, initial_parameters, vocab=None,
+    def __init__(self, initial_parameters, vocab,
                  fix_words=False, fix_relas=False, trans_rela=False):
         if type(initial_parameters) == str:
             # assume a PATH has been given
