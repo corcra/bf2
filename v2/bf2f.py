@@ -324,7 +324,7 @@ class params(object):
                 fV.write(word+' '+' '.join(map(str, self.V[i,:-1]))+'\n')
             for i in xrange(self.R):
                 rela = self.relas[i]
-                fG.write('rela_'+str(i)+' '+' '.join(map(str, self.G[i,:-1,:].reshape((self.C.shape[1])*(self.C.shape[1]-1),)))+'\n')
+                fG.write(rela+' '+' '.join(map(str, self.G[i,:-1,:].reshape((self.C.shape[1])*(self.C.shape[1]-1),)))+'\n')
             fC.close()
             fV.close()
             fG.close()
