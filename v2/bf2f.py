@@ -96,7 +96,7 @@ class params(object):
     Parameter object.
     Contains C, G, V and velocities for all.
     """
-    def __init__(self, initial_parameters, vocab,
+    def __init__(self, initial_parameters, vocab=None,
                  fix_words=False, fix_relas=False, trans_rela=False):
         if type(initial_parameters) == str:
             # assume a PATH has been given
@@ -395,6 +395,7 @@ class params(object):
             for (i, line) in enumerate(fG):
                 sl = line.split()
                 rela = sl[0]
+                relas.append(rela)
                 matrix = np.array(map(np.float, sl[1:])).reshape(d, d+1)
                 G[i, :-1, :] = matrix[:, :]
                 G[i, -1, -1] = 1
@@ -638,7 +639,6 @@ def train(training_data, start_parameters, options,
                         print '\t', val,
                     else:
                         print '\t','%.3f' % val,
-                print '\nC_lenz:', "%.5f" % C_lens, 'G_lenz:', "%.5f" % G_lens, 'V_lenz:', "%.5f" % V_lens
             logf.write('\t'.join(map(str, logline))+'\n')
             logf.flush()
             # yolo
