@@ -158,7 +158,7 @@ class params(object):
         if not self.fix_relas:
             if self.trans_rela:
                 # only update the final column of G
-                self.G[:, :, -1] = alphaG*self.G_vel[:, :, -1]
+                self.G[:, :, -1] += alphaG*self.G_vel[:, :, -1]
             else:
                 self.G += alphaG*self.G_vel
 
@@ -545,7 +545,8 @@ def train(training_data, start_parameters, options,
     try:
         vali_set_size = options['vali_set_size']
     except KeyError:
-        vali_set_size = D
+        # YMMV
+        vali_set_size = 1000
     # initialise
     vali_set = set()
     batch = np.empty(shape=(B, 3),dtype=np.int)
@@ -606,52 +607,60 @@ def train(training_data, start_parameters, options,
             delta_data = batch_gradient(parameters, batch)
             delta_params = combine_gradients(delta_data, delta_model, prefactor)
             parameters.update(delta_params, alpha, mu)
-        if n%D == 0 and n > B and n > S:
-            t = time.time() - t0
-            if calculate_ll:
-                ll = log_likelihood(parameters, training_data)
-                #ll = log_likelihood(parameters, vali_set)
-            else:
-                ll = 'NA'
-            data_energy = np.mean(parameters.E(batch))
-            vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
-            random_lox = np.array(zip(np.random.randint(0, W, 100),
-                                      np.random.randint(0, R, 100),
-                                      np.random.randint(0, W, 100)))
-            rand_energy = np.mean(parameters.E(random_lox))
-            # so this is different to the rand, cause it's a permuted version of the validation set
-            perm_energy = np.mean(parameters.E(perm_vali_batch))
-            if PERSISTENT:
-                model_energy = np.mean(parameters.E(samples))
-            else:
-                model_energy = 'NA'
-            # get some vector lengths
-            # TODO: make this more elegant
-            see, gee, vee = parameters.get()
-            C_lens = np.mean(np.linalg.norm(see[random_lox[:, 0], :-1], axis=1))
-            G_lens = np.mean(np.linalg.norm(gee[random_lox[:, 1], :-1], axis=(1,2)))
-            V_lens = np.mean(np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1))
-            # record to logfile
-            logline = [n + offset, t, ll, data_energy, model_energy, vali_energy, rand_energy, perm_energy, C_lens, G_lens, V_lens]
-            if VERBOSE:
-                for val in logline:
-                    if type(val) == str: 
-                        print '\t', val,
-                    else:
-                        print '\t','%.3f' % val,
-            logf.write('\t'.join(map(str, logline))+'\n')
-            logf.flush()
-            # yolo
-            #if np.random.random() < 0.2:
-            #    for r in xrange(R):
-            #        anim_fo = open('animations/anim_R'+str(r)+'_'+str(n).zfill(5)+'.txt','w')
-            #        for w in xrange(W):
-            #            #anim_fo.write('C'+str(w)+' '+' '.join(map(str, parameters.C[w, :-1]))+'\n')
-            #            anim_fo.write('V'+str(w)+' '+' '.join(map(str, np.dot(parameters.G[r, :, :],parameters.V[w, :])[:-1]))+'\n')
-            #        anim_fo.close()
-            # endyolo
-        if n%(D*10) == 0:
-            parameters.save(name+'_XXX.npy')
+        if D > 0:
+            # if D == 0 or < 0, this means NO DIAGNOSTICS ARE RUN
+            # the reason this is an option is clearly speed
+            if n%D == 0 and n > B and n > S:
+                t = time.time() - t0
+                if calculate_ll:
+                    ll = log_likelihood(parameters, training_data)
+                    #ll = log_likelihood(parameters, vali_set)
+                else:
+                    ll = 'NA'
+                data_energy = np.mean(parameters.E(batch))
+                vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
+                random_lox = np.array(zip(np.random.randint(0, W, 100),
+                                          np.random.randint(0, R, 100),
+                                          np.random.randint(0, W, 100)))
+                rand_energy = np.mean(parameters.E(random_lox))
+                # so this is different to the rand, cause it's a permuted version of the validation set
+                perm_energy = np.mean(parameters.E(perm_vali_batch))
+                if PERSISTENT:
+                    model_energy = np.mean(parameters.E(samples))
+                else:
+                    model_energy = 'NA'
+                # get some vector lengths
+                # TODO: make this more elegant
+                see, gee, vee = parameters.get()
+                C_lens = np.mean(np.linalg.norm(see[random_lox[:, 0], :-1], axis=1))
+                G_lens = np.mean(np.linalg.norm(gee[random_lox[:, 1], :-1], axis=(1,2)))
+                V_lens = np.mean(np.linalg.norm(vee[random_lox[:, 2], :-1], axis=1))
+                # record to logfile
+                logline = [n + offset, t, ll, 
+                           data_energy, model_energy, vali_energy,
+                           rand_energy, perm_energy,
+                           C_lens, G_lens, V_lens]
+                if VERBOSE:
+                    for val in logline:
+                        if type(val) == str: 
+                            print '\t', val,
+                        else:
+                            print '\t','%.3f' % val,
+                print ''
+                logf.write('\t'.join(map(str, logline))+'\n')
+                logf.flush()
+                # yolo
+                #if np.random.random() < 0.2:
+                #    for r in xrange(R):
+                #        anim_fo = open('animations/anim_R'+str(r)+'_'+str(n).zfill(5)+'.txt','w')
+                #        for w in xrange(W):
+                #            #anim_fo.write('C'+str(w)+' '+' '.join(map(str, parameters.C[w, :-1]))+'\n')
+                #            anim_fo.write('V'+str(w)+' '+' '.join(map(str, np.dot(parameters.G[r, :, :],parameters.V[w, :])[:-1]))+'\n')
+                #        anim_fo.close()
+                # endyolo
+            if n%(D*10) == 0:
+                parameters.save(name+'_XXX.npy')
+    logf.close()
     if VERBOSE: print 'Training done,', n, 'examples seen.'
     parameters.save(name+'_XXX.npy')
     return vali_set, n
