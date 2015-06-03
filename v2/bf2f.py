@@ -665,4 +665,5 @@ def train(training_data, start_parameters, options,
     logf.close()
     if VERBOSE: print 'Training done,', n, 'examples seen.'
     parameters.save(name+'_XXX.npy')
+    options['alpha'] = alpha
     return vali_set, n
