@@ -660,6 +660,8 @@ def train(training_data, start_parameters, options,
                 # endyolo
             if n%(D*10) == 0:
                 parameters.save(name+'_XXX.npy')
+                if VERBOSE:
+                    print 'Saved parameters to', name+'_XXX.npy'
     logf.close()
     if VERBOSE: print 'Training done,', n, 'examples seen.'
     parameters.save(name+'_XXX.npy')
