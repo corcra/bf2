@@ -641,7 +641,8 @@ def train(training_data, start_parameters, options,
                            rand_energy, perm_energy,
                            C_lens, G_lens, V_lens]
                 if VERBOSE:
-                    for val in logline:
+                    print '\t', logline[0],
+                    for val in logline[1:]:
                         if type(val) == str: 
                             print '\t', val,
                         else:
@@ -666,4 +667,5 @@ def train(training_data, start_parameters, options,
     if VERBOSE: print 'Training done,', n, 'examples seen.'
     parameters.save(name+'_XXX.npy')
     options['alpha'] = alpha
-    return vali_set, n
+    options['offset'] += n
+    return vali_set
