@@ -600,7 +600,7 @@ def train(training_data, start_parameters, options,
             delta_model = batch_gradient(parameters, samples)
             prefactor = float(B)/len(samples)
         if n%B == 0 and n > S:
-            alpha = update_learning_rate(alpha0, tau, n/B)
+            alpha = update_learning_rate(alpha0, tau, (n+offset)/B)
             if EXACT:
                 delta_model = Z_gradient(parameters)
                 prefactor = float(B)
