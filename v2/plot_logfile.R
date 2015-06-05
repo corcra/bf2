@@ -2,10 +2,10 @@ library(ggplot2)
 library(reshape2)
 
 args<-commandArgs(TRUE)
-fname<-args[1]
-da<-read.table(fname,header=TRUE, na.strings=c("nan"))
+fname_raw<-args[1]
+da<-read.table(fname_raw,header=TRUE, na.strings=c("nan"))
+fname<-gsub("_logfile.txt", "", fname_raw)
 da<-na.omit(da)
-print(da[1,])
 
 datac<-"deepskyblue"
 modelc<-"springgreen3"
@@ -28,9 +28,13 @@ ggsave(paste0(fname,"_energies.png"))
 
 # log likelihood
 dll<-da[,c("n","ll")]
-ggplot(dll, aes(x=n, y=ll))+geom_point()+ggtitle(fname)
-#ggsave(paste0(fname,"_ll.pdf"))
-ggsave(paste0(fname,"_ll.png"))
+if (sd(dll$ll) > 0){
+    ggplot(dll, aes(x=n, y=ll))+geom_point()+ggtitle(fname)
+    #ggsave(paste0(fname,"_ll.pdf"))
+    ggsave(paste0(fname,"_ll.png"))
+} else{
+    print("not plotting log-likelihood (variance 0, probably not recorded)")
+}
 
 # compare ll with weirdratio
 #ratio<-abs(da$valiset_energy/da$perm_energy-(da$valiset_energy/da$perm_energy)[1])
