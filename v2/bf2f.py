@@ -22,6 +22,14 @@ if THEANO:
     from bf2f_theano_params import *
 # yolo
 #linn = mp.ProcessingPool(5)
+# every time the ENTIRE training dataset is pulled in, shuffle it!
+# (this may help with training with multiple epochs...)
+SHUFFLE=False
+# fancier optimization scheme (http://arxiv.org/pdf/1412.6980.pdf)
+ADAM=False
+if ADAM:
+    EPSILON=1e-8
+    LAMBDA=(1-1e-8)
 
 # --- functions ! --- #
 def clean_word(word):
@@ -88,6 +96,9 @@ class data_stream(object):
         for line in fi:
             s, r, t = map(int, line.split())
             traindata.append([s, r, t])
+        traindata = np.array(traindata[1:])
+        if SHUFFLE:
+            np.random.shuffle(traindata)
         return np.array(traindata[1:])
 
 # --- parameters object --- #
@@ -126,10 +137,14 @@ class params(object):
             self.C = deepcopy(C)
             self.G = deepcopy(G)
             self.V = deepcopy(V)
-        # velocities
+        # velocities (this is m_t in Adam paper)
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
         self.V_vel = np.zeros(shape=self.V.shape)
+        # acceleration (this is v_t in Adam paper)
+        self.C_acc = np.zeros(shape=self.C.shape)
+        self.G_acc = np.zeros(shape=self.G.shape)
+        self.V_acc = np.zeros(shape=self.V.shape)
         # fix some parameters?
         # (never update these)
         self.fix_words = fix_words
@@ -137,30 +152,58 @@ class params(object):
         # special type of relationship (translations only)
         self.trans_rela = trans_rela
 
-    def update(self, delta_parameters, alpha, mu):
+    def update(self, grad_parameters, alpha, mu, nu=None):
         """
-        Updates velocities and then parameters.
+        Updates parameters.
+        Note: assumes alpha, mu, nu are pre-updated.
         """
         # unwrap
-        deltaC, deltaG, deltaV = delta_parameters
+        gradC, gradG, gradV = grad_parameters
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
         if not self.fix_words:
-            self.C_vel = muC*self.C_vel + (1-muC)*deltaC
-            self.V_vel = muV*self.V_vel + (1-muV)*deltaV
+            self.C_vel = muC*self.C_vel + (1-muC)*gradC
+            self.V_vel = muV*self.V_vel + (1-muV)*gradV
         if not self.fix_relas:
-            self.G_vel = muG*self.G_vel + (1-muG)*deltaG
+            self.G_vel = muG*self.G_vel + (1-muG)*gradG
+        if ADAM:
+            nuC, nuG, nuV = nu
+            # accels (elementwise squaring)
+            gradsqC = gradC*gradC
+            gradsqG = gradG*gradG
+            gradsqV = gradV*gradV
+            # update accelerations
+            if not self.fix_words:
+                self.C_acc = nuC*self.C_acc + (1-nuC)*gradsqC
+                self.V_acc = nuV*self.V_acc + (1-nuV)*gradsqV
+            if not self.fix_relas:
+                self.G_acc = nuG*self.G_acc + (1-nuG)*gradsqG
+            # get update-specific alphas
+            alphaC_hat = alphaC*np.sqrt(1-nuC)/(1-muC)
+            alphaG_hat = alphaG*np.sqrt(1-nuG)/(1-muG)
+            alphaV_hat = alphaV*np.sqrt(1-nuV)/(1-muV)
+            # how to increment the parameter?
+            deltaC = self.C_vel/(np.sqrt(self.C_acc) + EPSILON)
+            deltaG = self.G_vel/(np.sqrt(self.G_acc) + EPSILON)
+            deltaV = self.V_vel/(np.sqrt(self.V_acc) + EPSILON)
+        else:
+            deltaC = self.C_vel
+            deltaG = self.G_vel
+            deltaV = self.V_vel
+            alphaC_hat = alphaC
+            alphaG_hat = alphaG
+            alphaV_hat = alphaV
         # update parameters
         if not self.fix_words:
-            self.C += alphaC*self.C_vel
-            self.V += alphaV*self.V_vel
+            self.C += alphaC_hat*deltaC
+            self.V += alphaV_hat*deltaV
         if not self.fix_relas:
             if self.trans_rela:
                 # only update the final column of G
-                self.G[:, :, -1] += alphaG*self.G_vel[:, :, -1]
+                self.G[:, :, -1] += alphaG_hat*deltaG[:, :, -1]
             else:
-                self.G += alphaG*self.G_vel
+                self.G += alphaG_hat*deltaG
 
     def grad_E(self, locations):
         """
@@ -508,16 +551,6 @@ def permute_batch(word_perm, rela_perm, batch):
         mapped_batch[i] = (word_perm[s], rela_perm[r], word_perm[t])
     return mapped_batch
 
-def update_learning_rate(alpha0, tau, t):
-    """
-    Update learning rate according to some schedule.
-    """
-    alpha_new = [alpha0[0], alpha0[1], alpha0[2]]
-    for z in xrange(3):
-        if not tau[z] == 0:
-            alpha_new[z] = alpha0[z]/(1+float(t)/tau[z])
-    return alpha_new
-        
 def train(training_data, start_parameters, options,
           EXACT=False, PERSISTENT=True, NOISE=False, VERBOSE=True):
     """
@@ -539,7 +572,11 @@ def train(training_data, start_parameters, options,
     D = options['diagnostics_rate']
     K = options['gibbs_iterations']
     calculate_ll = options['calculate_ll']
-    alpha0, mu, tau = options['alpha'], options['mu'], options['tau']
+    alpha0 = options['alpha']
+    mu, nu = options['mu'], options['nu']
+    mu_t = mu[:]
+    alpha = alpha0[:]
+    tau = options['tau']
     name = options['name']
     offset = options['offset']
     try:
@@ -600,13 +637,17 @@ def train(training_data, start_parameters, options,
             delta_model = batch_gradient(parameters, samples)
             prefactor = float(B)/len(samples)
         if n%B == 0 and n > S:
-            alpha = update_learning_rate(alpha0, tau, (n+offset)/B)
             if EXACT:
                 delta_model = Z_gradient(parameters)
                 prefactor = float(B)
             delta_data = batch_gradient(parameters, batch)
             delta_params = combine_gradients(delta_data, delta_model, prefactor)
-            parameters.update(delta_params, alpha, mu)
+            if ADAM:
+                mu_t = mu_t*LAMBDA
+            else:
+                if not 0 in tau:
+                    alpha = alpha0/(1+(n+offset)/(tau*B))
+            parameters.update(delta_params, alpha, mu_t, nu)
         if D > 0:
             # if D == 0 or < 0, this means NO DIAGNOSTICS ARE RUN
             # the reason this is an option is clearly speed
