@@ -12,6 +12,8 @@ import time
 import re
 from copy import deepcopy
 #import pathos.multiprocessing as mp
+# yolo
+from thresholds_fn import devset_accuracy
 
 # --- CONSTANTS --- #
 THEANO=False
@@ -24,12 +26,14 @@ if THEANO:
 #linn = mp.ProcessingPool(5)
 # every time the ENTIRE training dataset is pulled in, shuffle it!
 # (this may help with training with multiple epochs...)
-SHUFFLE=False
+SHUFFLE=True
 # fancier optimization scheme (http://arxiv.org/pdf/1412.6980.pdf)
-ADAM=False
+ADAM=True
 if ADAM:
     EPSILON=1e-8
     LAMBDA=(1-1e-8)
+# normalise vectors to 1, matrices to have max element = 1
+NORMALISE=True
 
 # --- functions ! --- #
 def clean_word(word):
@@ -204,6 +208,14 @@ class params(object):
                 self.G[:, :, -1] += alphaG_hat*deltaG[:, :, -1]
             else:
                 self.G += alphaG_hat*deltaG
+        if NORMALISE:
+            # hax
+            # the vectors are simple
+            self.C[:, :-1] /= np.linalg.norm(self.C[:, :-1]).reshape(-1,1)
+            self.V[:, :-1] /= np.linalg.norm(self.V[:, :-1]).reshape(-1,1)
+            # the matrices are less simple
+            for r in xrange(self.R):
+                self.G[r, :-1, :] /= np.max(abs(self.G[r, :-1, :]))
 
     def grad_E(self, locations):
         """
@@ -573,11 +585,16 @@ def train(training_data, start_parameters, options,
     K = options['gibbs_iterations']
     calculate_ll = options['calculate_ll']
     alpha0 = options['alpha']
-    mu, nu = options['mu'], options['nu']
+    mu = options['mu']
+    try:
+        nu =  options['nu']
+    except KeyError:
+        nu = None
     mu_t = mu[:]
     alpha = alpha0[:]
     tau = options['tau']
     name = options['name']
+    print name
     offset = options['offset']
     try:
         vali_set_size = options['vali_set_size']
@@ -699,6 +716,10 @@ def train(training_data, start_parameters, options,
                 #            #anim_fo.write('C'+str(w)+' '+' '.join(map(str, parameters.C[w, :-1]))+'\n')
                 #            anim_fo.write('V'+str(w)+' '+' '.join(map(str, np.dot(parameters.G[r, :, :],parameters.V[w, :])[:-1]))+'\n')
                 #        anim_fo.close()
+                # endyolo
+                # yololo
+                # record performance on devset (nips2013)
+                #devset_accuracy(devpath, devlogpath, parameters, n + offset)
                 # endyolo
             if n%(D*10) == 0:
                 parameters.save(name+'_XXX.npy')
