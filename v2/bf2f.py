@@ -32,8 +32,12 @@ ADAM=True
 if ADAM:
     EPSILON=1e-8
     LAMBDA=(1-1e-8)
-# normalise vectors to 1, matrices to have max element = 1
-NORMALISE=True
+# normalise vectors to 1, matrices to have max element = 1 (weird, weird)
+NORMALISE=False
+# energy type
+#ETYPE='euclidean'
+#ETYPE='dot'
+ETYPE='angular'
 
 # --- functions ! --- #
 def clean_word(word):
@@ -226,11 +230,34 @@ class params(object):
         C_sub = self.C[locations[:, 0]]
         G_sub = self.G[locations[:, 1]]
         V_sub = self.V[locations[:, 2]]
-        # this is for Etype == 'dot'
-        # TODO: make this efficient
-        dE_C = -np.einsum('...i,...ij', V_sub, G_sub)
-        dE_G = -np.einsum('...i,...j', V_sub, C_sub)
-        dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
+        if ETYPE == 'dot':
+            # TODO: make this efficient
+            dE_C = -np.einsum('...i,...ij', V_sub, G_sub)
+            dE_G = -np.einsum('...i,...j', V_sub, C_sub)
+            dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
+        elif ETYPE == 'euclidean':
+            # TODO: make efficient, probably
+            # NOTE: applying G to V, not C
+            GV_C = np.einsum('...ij,...j', G_sub, V_sub) - C_sub
+            lens = np.linalg.norm(GV_C, axis=1).reshape(-1, 1)
+            GV_Cl = GV_C/lens
+            dE_C = 1*GV_C/lens
+            dE_G = -np.einsum('...i,...j', GV_Cl, V_sub)
+            dE_V = -np.einsum('...i,...ij', GV_Cl, G_sub)
+        elif ETYPE =='angular':
+            # TODO: make efficient, probably
+            # also test
+            # NOTE: applying G to V, not C
+            GV = np.einsum('...ij,...j', G_sub, V_sub)
+            GVC = np.einsum('...i,...i', GV, C_sub)
+            GV_len = np.linalg.norm(GV, axis=1).reshape(-1, 1)
+            C_len = np.linalg.norm(C_sub, axis=1).reshape(-1, 1)
+            dE_C = 1/(GV_len*C_len*_Clen)*(C_len*GV - GVC*(C_sub/C_len))
+            prefactor = 1/(GV_len*GV_len*C_len)
+            dE_G = prefactor*(GV_len*np.einsum('...i,...j', C_sub, V_sub) - (GVC/GV_len)*(np.einsum('...i,...j', GV_ V_sub)))
+            dE_V = prefactor*(GV_len*np.einsum('...ij,...i', G_sub, C_sub) - (GVC/GV_len)*(np.einsum('...i,...ij', GV, G_sub)))
+        else:
+            sys.exit('ERROR: Not implemented')
         return dE_C, dE_G, dE_V
 
     def E_axis(self, triple, switch):
@@ -243,16 +270,49 @@ class params(object):
             #GC = np.dot(self.C, self.G[r].T)
             #energy = -np.dot(GC, self.V[t])
             # note: above version is significantly slower than the below
-            VG = np.dot(self.V[t], self.G[r])
-            energy = -np.dot(self.C, VG)
+            if ETYPE == 'dot':
+                VG = np.dot(self.V[t], self.G[r])
+                energy = -np.dot(self.C, VG)
+            elif ETYPE == 'euclidean':
+                GV = np.dot(self.G[r, :, :], self.V[t, :])
+                energy = -np.linalg.norm(GV - self.C, axis=1)
+            elif ETYPE == 'angular':
+                GV = np.dot(self.G[r, :, :], self.V[t, :])
+                GVC = np.einsum('...j...ij', GV, self.C)
+                GV_len = np.linalg.norm(GV)
+                C_len = np.linalg.norm(self.C, axis=1).reshape(-1, 1)
+                energy = 1 - (1/pi)*acos(GVC/(GV_len*C_len))
+            else: sys.exit('ERROR: Not implemented')
         elif switch == 'G':
             # return over all R
-            VG = np.dot(self.V[t], self.G)
-            energy = -np.dot(VG, self.C[s])
+            if ETYPE == 'dot':
+                VG = np.dot(self.V[t], self.G)
+                energy = -np.dot(VG, self.C[s])
+            elif ETYPE == 'euclidean':
+                GV = np.dot(self.G[:, :, :], self.V[t, :])
+                energy = -np.linalg.norm(GV - self.C[s, :], axis=1)
+            elif ETYPE == 'angular':
+                GV = np.dot(self.G[:, :, :], self.V[t, :])
+                GVC = np.einsum('...ij,...j', GV, self.C[s, :])
+                GV_len = np.linalg.norm(GV, axis=1).reshape(-1, 1)
+                C_len = np.linalg.norm(self.C[s, :])
+                energy = 1 - (1/pi)*acos(GVC/(GV_len*C_len))
+            else: sys.exit('ERROR: Not implemented')
         elif switch == 'V':
             #return over all T
-            GC = np.dot(self.G[r], self.C[s])
-            energy = -np.dot(self.V, GC)
+            if ETYPE == 'dot':
+                GC = np.dot(self.G[r], self.C[s])
+                energy = -np.dot(self.V, GC)
+            elif ETYPE == 'euclidean':
+                GV = np.einsum('...jk,...ik', self.G[r, :, :], self.V)
+                energy = -np.linalg.norm(GV - self.C[s, :], axis=1)
+            elif ETYPE == 'angular':
+                GV = np.einsum('...jk,...ik', self.G[r,:, :], self.V)
+                GVC = np.dot(GV, self.C[s, :])
+                GV_len = np.linalg.norm(GV, axis=1).reshape(-1, 1)
+                C_len = np.linalg.norm(self.C[s, :])
+                energy = 1 - (1/pi)*acos(GVC/(GV_len*C_len))
+            else: sys.exit('ERROR: Not implemented')
         else:
             print 'ERROR: Cannot parse switch.'
             sys.exit()
@@ -262,7 +322,18 @@ class params(object):
         """
         The energy of a SINGLE triple.
         """
-        return -np.dot(self.V[triple[2]], np.dot(self.G[triple[1]], self.C[triple[0]]))
+        if ETYPE == 'dot':
+            energy = -np.dot(self.V[triple[2]], np.dot(self.G[triple[1]], self.C[triple[0]]))
+        elif ETYPE == 'euclidean':
+            energy = -np.linalg.norm(np.dot(self.G[triple[1]], self.V[triple[2]]) - self.C[triple[0]])
+        elif ETYPE == 'angular':
+            GV = np.dot(self.G[triple[1]], self.V[triple[2]])
+            GVC = np.dot(GV, self.C[triple[0]])
+            GV_len = np.linalg.norm(GV)
+            C_len = np.linalg.norm(self.C[triple[0]])
+            energy = 1 - (1/pi)*acos(GVC/(GV_len*C_len))
+        else: sys.exit('ERROR: Not implemented')
+        return energy
 
     def E(self, locations=None):
         """
@@ -311,8 +382,20 @@ class params(object):
             R = self.R
             locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
         energy = np.empty(shape=len(locations), dtype=np.float)
-        for (i, triple) in enumerate(locations):
-            energy[i] = -np.dot(self.C[triple[0]], np.dot(self.V[triple[2]], self.G[triple[1]]))
+        if ETYPE == 'dot':
+            for (i, triple) in enumerate(locations):
+                energy[i] = -np.dot(self.C[triple[0]], 
+                                    np.dot(self.V[triple[2]], 
+                                           self.G[triple[1]]))
+        elif ETYPE == 'euclidean':
+            for (i, triple) in enumerate(locations):
+                energy[i] = -np.linalg.norm(np.dot(self.G[triple[1]], 
+                                                   self.V[triple[2]]) -\
+                                            self.C[triple[0]])
+        elif ETYPE == 'angular':
+            for (i, triple) in enumerate(locations):
+                energy[i] = self.E_triple(triple)
+        else: sys.exit('ERROR: Not implemented')
         # V10
         #energy = []
         #for triple in locations:
