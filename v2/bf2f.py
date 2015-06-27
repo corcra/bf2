@@ -610,7 +610,7 @@ def Z_gradient(parameters):
     dV_partition /= Z
     return dC_partition, dG_partition, dV_partition
 
-def batch_gradient(parameters, batch):
+def batch_gradient(parameters, batch, omega):
     """
     Gradient is a difference of contributions from:
     1. data distribution (batch of training examples)
@@ -618,6 +618,10 @@ def batch_gradient(parameters, batch):
     In both cases, we need to evaluate a gradient over a batch of triples.
     This is a general function for both tasks
     (so we expect to call it twice for each 'true' gradient evaluation.)
+
+    omega is a vector of weights associated with relationships
+    (length = R)
+    each gradient contribution is scaled by omega_r
     """
     W = parameters.W
     R = parameters.R
@@ -627,9 +631,10 @@ def batch_gradient(parameters, batch):
     dV_batch = np.zeros(shape=(W, d+1))
     dE_C_batch, dE_G_batch, dE_V_batch = parameters.grad_E(batch)
     for (i, (s, r, t)) in enumerate(batch):
-        dC_batch[s, :] -= dE_C_batch[i]
-        dG_batch[r, :, :] -= dE_G_batch[i]
-        dV_batch[t, :] -= dE_V_batch[i]
+        prefactor = omega[r]
+        dC_batch[s, :] -= prefactor*dE_C_batch[i]
+        dG_batch[r, :, :] -= prefactor*dE_G_batch[i]
+        dV_batch[t, :] -= prefactor*dE_V_batch[i]
     return (dC_batch, dG_batch, dV_batch)
 
 def combine_gradients(delta_data, delta_model, prefactor):
@@ -708,6 +713,11 @@ def train(training_data, start_parameters, options,
     logf = open(name+'_logfile.txt','a')
     W = parameters.W
     R = parameters.R
+    try:
+        omega = options['omega']
+    except KeyError:
+        # no downweighting!
+        omega = [1]*R
     # a fixed permutation, for testing my strange likelihood ratio thing
     W_perm = dict(enumerate(np.random.permutation(W)))
     R_perm = dict(enumerate(np.random.permutation(R)))
@@ -745,13 +755,13 @@ def train(training_data, start_parameters, options,
                     #sampled_counts[sampled_triple[2]] += 1
             # yolo
             #print sampled_counts.values()
-            delta_model = batch_gradient(parameters, samples)
+            delta_model = batch_gradient(parameters, samples, omega)
             prefactor = float(B)/len(samples)
         if n%B == 0 and n > S:
             if EXACT:
                 delta_model = Z_gradient(parameters)
                 prefactor = float(B)
-            delta_data = batch_gradient(parameters, batch)
+            delta_data = batch_gradient(parameters, batch, omega)
             delta_params = combine_gradients(delta_data, delta_model, prefactor)
             if ADAM:
                 mu_t = mu_t*LAMBDA
