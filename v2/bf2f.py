@@ -715,6 +715,7 @@ def train(training_data, start_parameters, options,
     R = parameters.R
     try:
         omega = options['omega']
+        assert len(omega) == R
     except KeyError:
         # no downweighting!
         omega = [1]*R
