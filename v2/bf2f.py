@@ -14,6 +14,7 @@ from copy import deepcopy
 #import pathos.multiprocessing as mp
 # yolo
 from thresholds_fn import devset_accuracy
+from math import pi
 
 # --- CONSTANTS --- #
 THEANO=False
@@ -36,8 +37,8 @@ if ADAM:
 NORMALISE=False
 # energy type
 #ETYPE='euclidean'
-#ETYPE='dot'
-ETYPE='angular'
+ETYPE='dot'
+#ETYPE='angular'
 
 # --- functions ! --- #
 def clean_word(word):
@@ -249,12 +250,22 @@ class params(object):
             # also test
             # NOTE: applying G to V, not C
             GV = np.einsum('...ij,...j', G_sub, V_sub)
-            GVC = np.einsum('...i,...i', GV, C_sub)
+            GVC = np.einsum('...i,...i', GV, C_sub).reshape(-1, 1)
             GV_len = np.linalg.norm(GV, axis=1).reshape(-1, 1)
             C_len = np.linalg.norm(C_sub, axis=1).reshape(-1, 1)
-            dE_C = 1/(GV_len*C_len*_Clen)*(C_len*GV - GVC*(C_sub/C_len))
+            # yolo
+            print GV_len.shape
+            print C_len.shape
+            print GVC.shape
+            print (C_sub/C_len).shape
+            print GV.shape
+            print 'csubshape'
+            print C_sub.shape
+            print C_len.shape
+            dE_C = 1/(GV_len*C_len*C_len)*(C_len*GV - GVC*(C_sub/C_len))
             prefactor = 1/(GV_len*GV_len*C_len)
-            dE_G = prefactor*(GV_len*np.einsum('...i,...j', C_sub, V_sub) - (GVC/GV_len)*(np.einsum('...i,...j', GV_ V_sub)))
+            print prefactor.shape
+            dE_G = prefactor*(GV_len*np.einsum('...i,...j', C_sub, V_sub) - (GVC/GV_len)*(np.einsum('...i,...j', GV, V_sub)))
             dE_V = prefactor*(GV_len*np.einsum('...ij,...i', G_sub, C_sub) - (GVC/GV_len)*(np.einsum('...i,...ij', GV, G_sub)))
         else:
             sys.exit('ERROR: Not implemented')
@@ -278,10 +289,10 @@ class params(object):
                 energy = -np.linalg.norm(GV - self.C, axis=1)
             elif ETYPE == 'angular':
                 GV = np.dot(self.G[r, :, :], self.V[t, :])
-                GVC = np.einsum('...j...ij', GV, self.C)
+                GVC = np.einsum('...j,...ij', GV, self.C)
                 GV_len = np.linalg.norm(GV)
-                C_len = np.linalg.norm(self.C, axis=1).reshape(-1, 1)
-                energy = 1 - (1/pi)*acos(GVC/(GV_len*C_len))
+                C_len = np.linalg.norm(self.C, axis=1)
+                energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
             else: sys.exit('ERROR: Not implemented')
         elif switch == 'G':
             # return over all R
@@ -294,9 +305,9 @@ class params(object):
             elif ETYPE == 'angular':
                 GV = np.dot(self.G[:, :, :], self.V[t, :])
                 GVC = np.einsum('...ij,...j', GV, self.C[s, :])
-                GV_len = np.linalg.norm(GV, axis=1).reshape(-1, 1)
+                GV_len = np.linalg.norm(GV, axis=1)
                 C_len = np.linalg.norm(self.C[s, :])
-                energy = 1 - (1/pi)*acos(GVC/(GV_len*C_len))
+                energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
             else: sys.exit('ERROR: Not implemented')
         elif switch == 'V':
             #return over all T
@@ -309,9 +320,9 @@ class params(object):
             elif ETYPE == 'angular':
                 GV = np.einsum('...jk,...ik', self.G[r,:, :], self.V)
                 GVC = np.dot(GV, self.C[s, :])
-                GV_len = np.linalg.norm(GV, axis=1).reshape(-1, 1)
+                GV_len = np.linalg.norm(GV, axis=1)
                 C_len = np.linalg.norm(self.C[s, :])
-                energy = 1 - (1/pi)*acos(GVC/(GV_len*C_len))
+                energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
             else: sys.exit('ERROR: Not implemented')
         else:
             print 'ERROR: Cannot parse switch.'
@@ -331,7 +342,7 @@ class params(object):
             GVC = np.dot(GV, self.C[triple[0]])
             GV_len = np.linalg.norm(GV)
             C_len = np.linalg.norm(self.C[triple[0]])
-            energy = 1 - (1/pi)*acos(GVC/(GV_len*C_len))
+            energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
         else: sys.exit('ERROR: Not implemented')
         return energy
 
