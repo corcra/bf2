@@ -388,7 +388,7 @@ class params(object):
         #for (i, triple) in enumerate(locations):
         #    energy[i] = self.E_triple(triple)
         # V9
-        if locations == None:
+        if locations is None:
             W = self.W
             R = self.R
             locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
