@@ -13,7 +13,7 @@ import re
 from copy import deepcopy
 #import pathos.multiprocessing as mp
 # yolo
-from thresholds_fn import devset_accuracy
+#from thresholds_fn import devset_accuracy
 from math import pi
 
 # --- CONSTANTS --- #
@@ -40,7 +40,7 @@ NORMALISE=False
 ETYPE='dot'
 #ETYPE='angular'
 
-# --- functions ! --- #
+# --- helper fns --- #
 def clean_word(word):
     # lowercase
     word1 = word.lower()
@@ -51,6 +51,68 @@ def clean_word(word):
     # strip trailing space
     word4 = word3.rstrip(' ')
     return word4
+
+def load_options(options_path):
+    # BRITTLE
+    print 'Reading options from',  options_path
+    options_raw = open(options_path, 'r').readlines()
+    options = dict()
+    for line in options_raw:
+        if '#' in line:
+            # skip 'comments'
+            continue
+        option_name = line.split(' ')[0]
+        option_value = ' '.join(line.split(' ')[1:])
+        # this is gross
+        if '(' in option_value:
+            value = tuple(map(float, re.sub('[\(\)]', '', option_value).split(',')))
+        elif '[' in option_value:
+            value = bf2f.np.array(map(float, re.sub('[\[\]]', '', option_value).split(',')))
+        elif option_value == 'False\n':
+            value = False
+        elif option_value == 'True\n':
+            value = True
+        else:
+            try:
+                value = int(option_value)
+            except ValueError:
+                # not an int
+                value = option_value.strip()
+        options[option_name] = value
+    # make np arrays
+    options['mu'] = bf2f.np.array(options['mu'])
+    options['nu'] = bf2f.np.array(options['nu'])
+    options['alpha'] = bf2f.np.array(options['alpha'])
+    options['omega'] = bf2f.np.array(options['omega'])
+    return options
+
+def generate_traindata(droot, W, R):
+    # define joint probabilities of all triples
+    # not sure why i'm using a beta distribution but w/e
+    probs = np.random.beta(a=0.5, b=0.5, size=(W, R, W))
+    Z = np.sum(probs)
+    probs /= Z
+    np.save(droot+'/w'+str(W)+'r'+str(R)+'_probs.npy', probs)
+    # how many training examples?
+    N = 50*W*R
+    print 'Generating', N, 'training examples with', W, 'words and', R, 'relas.'
+    locs = [(0,0,0)]*(W*R*W)
+    loc_probs = [0]*(W*R*W)
+    i = 0
+    for s in xrange(W):
+        for r in xrange(R):
+            for t in xrange(W):
+                locs[i] = (s, r, t)
+                loc_probs[i] = probs[s, r, t]
+                i += 1
+    fo = gzip.open(droot+'/w'+str(W)+'r'+str(R)+'_train.txt.gz','wb')
+    fo.write(str(W)+' '+str(R)+'\n')
+    triples = np.random.choice(len(locs), p=loc_probs, size=N, replace=True)
+    for n in xrange(N):
+        triple = locs[triples[n]]
+        fo.write(' '.join(map(str, triple))+'\n')
+    fo.close()
+    return True
 
 # --- data stream --- #
 class data_stream(object):
