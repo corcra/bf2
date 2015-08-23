@@ -9,7 +9,6 @@
 #                   2.2 kmeans
 #                   2.3 DBSCAN
 
-
 import numpy as np
 print 'Numpy version:', np.version.version
 import pandas as pd
@@ -27,31 +26,9 @@ from sklearn.cluster import dbscan
 from scipy.cluster.vq import kmeans2
 from multiprocessing import Pool
 from functools import partial
-#from theano import shared
-#from theano import function
-#from theano.tensor import fmatrix, ivector, fvector, imatrix
-#from theano.tensor import exp as texp
-#from theano import scan
 
 #  --- hyperparams --- #
-verbose = True
-
-# --- theano stuff --- #
-# RIGHT NOW THIS IS ALL JUST FOR CALCULATING PAIRWISE DISTANCES BETWEEN SENTENCES
-# coordinates of sentence elements (e.g. word pairs....)
-#coords = imatrix('coordinates')
-#dists = fvector('distances')
-#sigmasq = 1
-# distance matrix
-#dd = shared(np.float32(np.random.normal(size=(5,5))),'dd')
-## function to iterate over these coordinates
-#distances, updates = scan(fn=lambda coord: dd[tuple((coord[0],coord[1]))], outputs_info=None, sequences=[coords])
-## exponentiate, divide by sigmasq
-#exponentiated = texp(-(distances*distances/sigmasq))
-#total_distance = exponentiated.sum()
-## get the total distances...
-#calculate_sentence_distance = function(inputs=[coords], outputs=total_distance)
-
+VERBOSE = True
 
 # --- i/o functions --- #
 def get_words_vecs(data_path, norm=False):
@@ -68,7 +45,7 @@ def get_words_vecs(data_path, norm=False):
         vectors (ndarray of W x (d+1))
         w2v (dict of word:vec)
     """
-    if verbose:
+    if VERBOSE:
         print 'Splitting up words and vectors from', data_path
     excluded = []
     words = []
@@ -76,7 +53,7 @@ def get_words_vecs(data_path, norm=False):
     word2vec = dict()
     try:
         data = np.load(data_path)
-        if verbose:
+        if VERBOSE:
             print '.npy detected, assuming data is a dictionary!'
         data_stream = data.item()
         word2vec = data_stream
@@ -89,7 +66,7 @@ def get_words_vecs(data_path, norm=False):
                 excluded.append(word)
         vecs = np.array(vecs)
     except IOError:
-        if verbose:
+        if VERBOSE:
             print 'No .npy detected, assuming data in plaintext!'
         datafile = open(data_path, 'rU')
         line1 = datafile.readline()
@@ -118,7 +95,7 @@ def get_words_vecs(data_path, norm=False):
     return words, vecs, word2vec
 
 def get_matrices(data_path):
-    if verbose:
+    if VERBOSE:
         print 'Obtaining relationship matrices from', data_path
     # going to assume it's all just plaintext for now
     datafile = open(data_path, 'rU')
@@ -146,26 +123,6 @@ def get_matrices(data_path):
         rela2mat[rela] = mats[m, :, :]
         m += 1
     return relas, mats, rela2mat
-
-# this currently does not work, something to do with pickling
-def import_model(model_path):
-    # is loading modules ok in a funcion?
-    import bf.bri_fns_theano as bff
-    m = np.load(model_path).item()
-    print 'Loaded model object.'
-    # extract the words as a list (for later use)
-    # it would probably make sense to get all the other functions to work
-    # with the dictionaries one derives from the model
-    # but for now let's keep it open to plaintext imports as well
-    words = ['yo']*m.W
-    for (w,vals) in m.w2i.iteritems():
-        index = vals[0]
-        words[index] = w
-    # extract the other matrices
-    C = m.C.get_value()
-    V = m.V.get_value()
-    Gs = m.G.get_value()
-    return m, C, Gs, V, words
 
 def w2v_to_bf2(model_path, normalise=False):
     """
@@ -384,7 +341,7 @@ def get_closest(dist, topn, words, C, G, V, word_marker):
     if None in (word_index, word, word_vec):
         # failed at getting some information, abandon hope
         return None
-    if verbose:
+    if VERBOSE:
         print ''
     # if a distance vector is supplied, use it...
     # please be careful that the distance vector is appropriate
@@ -397,14 +354,14 @@ def get_closest(dist, topn, words, C, G, V, word_marker):
                       for j in indices])
     except (TypeError, ValueError) as e:
         # distance matrix does not exist
-        #if verbose:
+        #if VERBOSE:
         #    print 'No distance matrix detected, or unconventional word index provided!'
         d = sps.distance.cdist(word_vec,V,'cosine')
     # np 1.8 has argpartition, nicer!
     if '1.7' in np.version.version:
-        if verbose:
+        if VERBOSE:
             print 'Using numpy version', np.version.version, '- avoiding argpartition!'
-        if verbose:
+        if VERBOSE:
             print topn, 'closest word (indices) to', word, '(', word_index, ')'
         ordered = np.sort(d)[:topn+1]
         topn_words_indices = [np.where(d == val)[0][0] for val in ordered]
@@ -413,22 +370,22 @@ def get_closest(dist, topn, words, C, G, V, word_marker):
         #print 'Using argpartition because new numpy!'
         topn_words_indices = np.argpartition(d, tuple(range(topn+1)))[0][:(topn+1)]
         topn_words = [words[index] for index in topn_words_indices]
-    if verbose:
+    if VERBOSE:
         print ''
     # report the results
-    if verbose:
+    if VERBOSE:
         print 'Top '+str(topn)+' closest results to '+word+':\n'
     for i in xrange(topn+1):
-        if verbose:
+        if VERBOSE:
             print topn_words_indices[i], "\t", "%.5f" % d[:, topn_words_indices[i]][0], " ", topn_words[i]
-        if i == 0 and verbose:
+        if i == 0 and VERBOSE:
             print ''
     print ''
     return True
     #return topn_words
 
 def cut_dendrogram(Z, words, topy, t, criter='maxclust'):
-    if verbose:
+    if VERBOSE:
         print 'Getting clusters from the dendrogram!'
         print 'Criterion:', criter, '\tparam :', t
     # note choice of inconsistent
@@ -442,12 +399,6 @@ def q_cluster(assignments, n):
     return assignments[assignments['cluster'] == n]['word']
 
 # --- evaluation functions --- #
-def similarity_task(truthset_path, d, words, vecs):
-    """
-    ... more tests!
-    """
-    scores = dict()
-    return scores
 
 def analogy_task(truthset_path, d, words, vecs):
     """
@@ -510,14 +461,14 @@ def get_spread(clusterX):
     return np.std(distances)
 
 def eval_assignments(assignments, nclust, topy=10):
-    if verbose:
+    if VERBOSE:
         print 'There are', nclust, 'clusters!'
     csizes = np.array([len(assignments[assignments['cluster'] == i]) for i in xrange(nclust)])
     nsingleton = sum(csizes == 1)
     uniq_counts = list(set(csizes))
     topY = sorted(uniq_counts, reverse=True)[0:topy]
     indices = [np.where(csizes == i) for i in topY]
-    if verbose:
+    if VERBOSE:
         print 'There are', sum(csizes == 1), 'clusters with one entity.'
         print 'Top clusters:'
         for i in range(len(topY)):
@@ -526,7 +477,7 @@ def eval_assignments(assignments, nclust, topy=10):
 
 # --- clustering functions --- #
 def kmeans_clust(vecs, words, K):
-    if verbose:
+    if VERBOSE:
         print 'Running kmeans!'
     if np.mean(vecs[:,-1] == 1) == 1:
         # exclude the column of 1s
@@ -541,7 +492,7 @@ def kmeans_clust(vecs, words, K):
     return assignments, csizes, indices
 
 def DBSCAN_clust(d, words, epsilon):
-    if verbose:
+    if VERBOSE:
         print 'Running DBSCAN!'
     core, labels = dbscan(d, eps=epsilon, metric='precomputed')
     cluster_assignments = labels
@@ -573,7 +524,7 @@ def get_cluster_representatives(assignments, word2vec):
     return cluster_reps, assignments
 
 def hierarchical_clust(d, cluster_method='average'):
-    if verbose:
+    if VERBOSE:
         print 'Doing hierarchical clustering using fastcluster!'
     # some might say this function is redundant
     # d should be a distance vector
@@ -599,7 +550,7 @@ def get_distances(C, V, distance_metric, max_nvecs=50000, matrix=None):
         V = V[subset]
     else:
         subset = range(nvecs)
-    if verbose:
+    if VERBOSE:
         print 'Getting distances!'
     try:
         if not matrix.shape[0] == d:
@@ -614,24 +565,6 @@ def get_distances(C, V, distance_metric, max_nvecs=50000, matrix=None):
         # 'identity'
         GC = C
     return subset, sps.distance.cdist(V, GC, distance_metric)
-
-def record_subset_dicts(subset, words, path):
-    """
-    Have to subset the data to get pairwise distances?
-    Record the new dictionaries with this.
-    """
-    w2i_new, i2w_new = dict(), dict()
-    freq = 1
-    loc = 'subset'
-    for i in subset:
-        word = words[i]
-        index = i
-        w2i_new[word] = [index, freq, loc]
-        i2w_new[index] = [word, freq, loc]
-    print 'Saving to',path
-    np.save(re.sub('XXX','w2i',path), w2i_new)
-    np.save(re.sub('XXX','i2w',path), i2w_new)
-    return True
 
 # --- things pertaining to pairwise sentence distances --- #
 def speed_sentence_distance(i1, i2):
