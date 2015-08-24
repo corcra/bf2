@@ -501,6 +501,59 @@ class params(object):
                 samp = np.random.choice(len(probs), p=probs, size=1)[0]
                 ss[triple_drop] = samp
         return ss
+    
+    def complete_triple(self, triple, n_samples=1):
+        """
+        Completes a triple (['sword', 'rela', 'tword']) with a missing entry,
+        expects STRINGS belonging to the vocabulary. (human readable)
+        
+        the n_samples option allows multiple completions to be generated
+        """
+        lens = map(len, triple)
+        if not lens.count(0) == 1:
+            print 'ERROR: please drop exactly one entry from the triple'
+            return False
+        s, r, t = triple
+        # which axis we'll need to look over
+        triple_drop = lens.index(0)
+        if triple_drop == 0:
+            si = 0
+        else:
+            try:
+                si = self.words.index(s)
+            except ValueError:
+                print 'ERROR:', s, 'is not in vocabulary.'
+                return False
+        if triple_drop == 1:
+            ri = 0
+        else:
+            try:
+                ri = self.relas.index(r)
+            except ValueError:
+                print 'ERROR:', r, 'is not in vocabulary.'
+                return False
+        if triple_drop == 2:
+            ti = 0
+        else:
+            try:
+                ti = self.words.index(t)
+            except ValueError:
+                print 'ERROR:', t, 'is not in vocabulary.'
+                return False
+        # now do sampling
+        energy = self.E_axis((si, ri, ti), ['C', 'G', 'V'][triple_drop])
+        expmE = np.exp(-energy)
+        probs = expmE/np.sum(expmE)
+        samples = np.random.choice(len(probs), p=probs, size=n_samples)
+        completed_triples = np.array([triple]*n_samples)
+        if triple_drop == 1:
+            # rela
+            sampled_list = [self.relas[s] for s in samples]
+        else:
+            # word
+            sampled_list = [self.words[s] for s in samples]
+        completed_triples[:,triple_drop] = sampled_list
+        return completed_triples
 
     def get(self):
         """
