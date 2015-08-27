@@ -67,7 +67,7 @@ def load_options(options_path):
         if '(' in option_value:
             value = tuple(map(float, re.sub('[\(\)]', '', option_value).split(',')))
         elif '[' in option_value:
-            value = bf2f.np.array(map(float, re.sub('[\[\]]', '', option_value).split(',')))
+            value = np.array(map(float, re.sub('[\[\]]', '', option_value).split(',')))
         elif option_value == 'False\n':
             value = False
         elif option_value == 'True\n':
@@ -80,10 +80,10 @@ def load_options(options_path):
                 value = option_value.strip()
         options[option_name] = value
     # make np arrays
-    options['mu'] = bf2f.np.array(options['mu'])
-    options['nu'] = bf2f.np.array(options['nu'])
-    options['alpha'] = bf2f.np.array(options['alpha'])
-    options['omega'] = bf2f.np.array(options['omega'])
+    options['mu'] = np.array(options['mu'])
+    options['nu'] = np.array(options['nu'])
+    options['alpha'] = np.array(options['alpha'])
+    options['omega'] = np.array(options['omega'])
     return options
 
 def generate_traindata(droot, W, R):
