@@ -9,6 +9,11 @@ import sys
 
 COND_PROB = False
 #COND_PROB = True
+if COND_PROB:
+    switch = 'V'
+    condstring = '_cond'+switch
+else:
+    condstring = ''
 
 print 'cond_prob', str(COND_PROB)
 
@@ -29,11 +34,13 @@ try:
 except IndexError:
     sys.exit('must provide path to vectors')
 
-wordlist_path = '../data/wordlist_simple.txt'
-relalist_path = '../data/relalist_simple.txt'
+droot = '../data/'
+
+wordlist_path = droot+'wordlist_simple.txt'
+relalist_path = droot+'relalist_simple.txt'
 
 # get test data (note: operating on strings) (so not true)
-testpath = '../data/test_triples_simple.txt'
+testpath = droot+'test_triples_simple.txt'
 test = np.array(map(lambda x: map(int, x.strip('\n').split(' ')), open(testpath,'r').readlines()))
 print 'Dev data read from', testpath
 
@@ -53,17 +60,13 @@ n_test = len(test)/2
 test_scores = dict((rela, []) for rela in pp.relas)
 test_labels = dict((rela, []) for rela in pp.relas)
 
-word_dict = dict()
-rela_dict = dict()
 for line in open(wordlist_path):
     index = int(line.split()[0])
     word = line.split()[1]
-    word_dict[word] = index
     assert pp.words[index] == word
 for line in open(relalist_path):
     index = int(line.split()[0])
     rela = line.split()[1]
-    rela_dict[rela] = index
     assert pp.relas[index] == rela
 
 for i in xrange(0, len(test)-1, 2):
@@ -82,18 +85,17 @@ for i in xrange(0, len(test)-1, 2):
     del(r_true)
     del(r_false)
     energy_true = pp.E_triple((s_true, r, t_true))
-    # i know this because it is true for the dev sets
-    switch = 'V'
     energy_false = pp.E_triple((s_false, r, t_false))
     rela_specific_array = test_scores[pp.relas[r]]
     if COND_PROB:
-        denom = np.sum(np.exp(-pp.E_axis((s_true, r, t_true), switch)))
-        rela_specific_array.append([np.exp(-energy_true)/denom, np.exp(-energy_false)/denom])
+        denom_true = np.sum(np.exp(-pp.E_axis((s_true, r, t_true), switch)))
+        denom_false = np.sum(np.exp(-pp.E_axis((s_false, r, t_false), switch)))
+        rela_specific_array.append([np.exp(-energy_true)/denom_true, np.exp(-energy_false)/denom_false])
     else:
         rela_specific_array.append([-energy_true, -energy_false])
 
 # --- now load some cutoffs --- #
-thresh_path = re.sub('.txt', '_rela_thresholds_triples.txt', params_path)
+thresh_path = re.sub('.txt', '_rela_thresholds_triples'+condstring+'.txt', params_path)
 thresholds = dict()
 ti = open(thresh_path,'r')
 ti.readline()
@@ -107,7 +109,7 @@ print 'Thresholds read from', thresh_path
 ti.close()
 
 print '\nResults:'
-co_path = re.sub('.txt', '_test_accuracies.txt', params_path)
+co_path = re.sub('.txt', '_test_accuracies'+condstring+'.txt', params_path)
 co = open(co_path,'w')
 co.write('rela n accuracy\n')
 overall = 0
