@@ -73,7 +73,7 @@ if len(sys.argv) > 1:
     if 'wordlist' in options:
         wordlist = options['wordlist']
     if 'relalist' in options:
-        wordlist = options['wordlist']
+        relalist = options['relalist']
 else:
     print 'No options file provided, falling back to defaults.'
     # default options
