@@ -7,8 +7,16 @@ import numpy as np
 from sklearn.metrics import roc_curve
 import sys
 
-COND_PROB = False
-#COND_PROB = True
+#COND_PROB = False
+COND_PROB = True
+if COND_PROB:
+    # i know this because it is true for the dev sets
+    #switch = 'V'
+    # get the probability of the R
+    switch = 'G'
+    condstring = '_cond'+switch
+else:
+    condstring = ''
 
 print 'cond_prob', str(COND_PROB)
 
@@ -29,7 +37,8 @@ except IndexError:
     sys.exit('must provide path to vectors')
 
 # get dev data (note: operating on strings) (so not true)
-devpath = '../data/dev_triples_simple.txt'
+droot = '../data/'
+devpath = droot+'dev_triples_simple.txt'
 dev = np.array(map(lambda x: map(int, x.strip('\n').split(' ')), open(devpath,'r').readlines()))
 print 'Dev data read from', devpath
 
@@ -38,7 +47,7 @@ pp = params(params_path)
 print 'Parameters loaded from', params_path
 if pp.relas == map(str, xrange(pp.R)):
     relamap = dict()
-    for line in open('/cbio/grlab/home/hyland/data/nips13-dataset/Wordnet/simplified_vocab/relalist_simple.txt', 'r'):
+    for line in open(droot+'relalist_simple.txt', 'r'):
         index = int(line.split()[0])
         rela = line.split()[1]
         relamap[rela] = index
@@ -65,13 +74,12 @@ for i in xrange(0, len(dev)-1, 2):
     del(r_true)
     del(r_false)
     energy_true = pp.E_triple((s_true, r, t_true))
-    # i know this because it is true for the dev sets
-    switch = 'V'
     energy_false = pp.E_triple((s_false, r, t_false))
     rela_specific_array = dev_scores[pp.relas[r]]
     if COND_PROB:
-        denom = np.sum(np.exp(-pp.E_axis((s_true, r, t_true), switch)))
-        rela_specific_array.append([np.exp(-energy_true)/denom, np.exp(-energy_false)/denom])
+        denom_true = np.sum(np.exp(-pp.E_axis((s_true, r, t_true), switch)))
+        denom_false = np.sum(np.exp(-pp.E_axis((s_false, r, t_false), switch)))
+        rela_specific_array.append([np.exp(-energy_true)/denom_true, np.exp(-energy_false)/denom_false])
     else:
         rela_specific_array.append([-energy_true, -energy_false])
 
@@ -94,7 +102,7 @@ for (rela, specific_array) in dev_scores.iteritems():
         thresholds[rela] = (0, 0, 0)
 
 print '\nResults:'
-co_path = re.sub('.txt', '_rela_thresholds_triples.txt', params_path)
+co_path = re.sub('.txt', '_rela_thresholds_triples'+condstring+'.txt', params_path)
 co = open(co_path,'w')
 co.write('rela n threshold accuracy\n')
 weighted_acc = 0
