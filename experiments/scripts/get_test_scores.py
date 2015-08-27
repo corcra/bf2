@@ -115,7 +115,7 @@ co.write('rela n accuracy\n')
 overall = 0
 nn = 0
 for rela in test_scores:
-    scores = -np.array(test_scores[rela])
+    scores = np.array(test_scores[rela])
     if len(scores) > 0:
         thresh = thresholds[rela]
         accuracy = get_accuracy(scores, thresh)
