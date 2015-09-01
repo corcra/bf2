@@ -21,8 +21,12 @@ import fastcluster
 import re
 import time
 import cPickle
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
 from copy import copy, deepcopy
 from sklearn.cluster import dbscan
+from sklearn.manifold import TSNE
 from scipy.cluster.vq import kmeans2
 from multiprocessing import Pool
 from functools import partial
@@ -638,6 +642,28 @@ def sentence_distance(d, words, vecs, s1, s2, sigmasq=1.0):
             pair_dist = sps.distance.cosine(v1,v2)
         distance += np.exp(-(pair_dist*pair_dist)/sigmasq)
     return distance/numpairs
+
+# --- visualisation functions --- #
+
+def do_tSNE(words, vecs, wordset=None):
+    """
+    Uses sklearn to do tSNE on the vectors, saves an image.
+    wordset allows a set of words of interest to be specified;
+        tSNE is still performed on the full set of words, but we only visualise
+        those in the wordset
+    """
+    if wordset is None:
+        wordset = set(words)
+    tsne = TSNE(n_components=2, random_state=0)
+    vecs_tsne = tsne.fit_transform(vecs)
+    fig = plt.figure()
+    plt.xlim(min(vecs_tsne[:, 0]), max(vecs_tsne[:, 0]))
+    plt.ylim(min(vecs_tsne[:, 1]), max(vesc_tsne[:, 1]))
+    for (i, word) in enumerate(words):
+        if word in wordset:
+            plt.annotate(word, xy = vecs_tsne[i, :], xytext = vecs_tsne[i, :])
+    plt.savefig('tsne.png')
+    return True
 
 # --- unsorted functions --- #
 def order_sentences(head, neighbours, d, words, vecs, p):
