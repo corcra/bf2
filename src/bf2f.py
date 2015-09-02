@@ -256,6 +256,10 @@ class params(object):
             alphaV_hat = alphaV*np.sqrt(1-nuV)/(1-muV)
             # how to increment the parameter?
             deltaC = self.C_vel/(np.sqrt(self.C_acc) + EPSILON)
+            # possibly add regulariser here (before variance normalisation, or
+            # after ... test this)
+            # the other option is to put it in the 'true' gradient, but this
+            # may change the final solution...
             deltaG = self.G_vel/(np.sqrt(self.G_acc) + EPSILON)
             deltaV = self.V_vel/(np.sqrt(self.V_acc) + EPSILON)
         else:
