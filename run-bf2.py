@@ -8,7 +8,6 @@ from subprocess import call
 import sys
 import os.path
 
-
 #ONLINE=True
 ONLINE=False
 #EXACT=True
@@ -18,8 +17,8 @@ PERSISTENT=True
 NOISE=False
 
 if EXACT or NOISE: PERSISTENT=False
-CALC_LL=True
-#CALC_LL = False
+#CALC_LL=True
+CALC_LL = False
 #CALC_LL=not(ONLINE)
 
 # --- paths --- #
