@@ -227,13 +227,15 @@ class params(object):
         # special type of relationship (translations only)
         self.trans_rela = trans_rela
 
-    def update(self, grad_parameters, alpha, mu, nu=None):
+    def update(self, grad_parameters, alpha, mu, nu=None, kappa=0.01):
         """
         Updates parameters.
         Note: assumes alpha, mu, nu are pre-updated.
         """
         # unwrap
         gradC, gradG, gradV = grad_parameters
+        # regularise (REGOPT 1)
+        #gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
@@ -242,6 +244,8 @@ class params(object):
             self.V_vel = muV*self.V_vel + (1-muV)*gradV
         if not self.fix_relas:
             self.G_vel = muG*self.G_vel + (1-muG)*gradG
+            # regularise (REGOPT 2)
+            self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         if ADAM:
             nuC, nuG, nuV = nu
             # accels (elementwise squaring)
@@ -265,6 +269,8 @@ class params(object):
             # the other option is to put it in the 'true' gradient, but this
             # may change the final solution...
             deltaG = self.G_vel/(np.sqrt(self.G_acc) + EPSILON)
+            # regularise (REGOPT 3)
+            #deltaG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
             deltaV = self.V_vel/(np.sqrt(self.V_acc) + EPSILON)
         else:
             deltaC = self.C_vel
