@@ -40,7 +40,7 @@ NORMALISE=False
 ETYPE='dot'
 #ETYPE='angular'
 # code for unobserved relationship
-MISS_R=-1
+MISS_R=9999
 
 # --- helper fns --- #
 def clean_word(word):
@@ -756,7 +756,7 @@ def log_likelihood(parameters, data):
     locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
     energy = parameters.E(locations).reshape(W, R, W)
     logZ = np.log(np.sum(np.exp(-energy)))
-    ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data])
+    ll = np.sum([(-energy[s, r, t] - logZ) for s, r, t in data if not r == MISS_R])
     return ll
 
 def sample_noise(W, R, M):
@@ -885,13 +885,13 @@ def train(training_data, start_parameters, options,
     # a fixed permutation, for testing my strange likelihood ratio thing
     W_perm = dict(enumerate(np.random.permutation(W)))
     R_perm = dict(enumerate(np.random.permutation(R)))
-    R_perm[-1] = -1
+    R_perm[MISS_R] = MISS_R
     # record sampling frequencies
     #sampled_counts = dict((i, 0) for i in xrange(W))
     n = 0
     t0 = time.time()
     for example in training_data:
-        if len(vali_set) < vali_set_size:
+        if len(vali_set) < vali_set_size and not example[1] == MISS_R:
             vali_set.add(tuple(example))
             continue
         if len(vali_set) == vali_set_size:
@@ -954,7 +954,7 @@ def train(training_data, start_parameters, options,
                     #ll = log_likelihood(parameters, vali_set)
                 else:
                     ll = 'NA'
-                data_energy = np.mean(parameters.E(batch))
+                data_energy = np.mean(parameters.E(visible_batch))
                 vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
                 random_lox = np.array(zip(np.random.randint(0, W, 100),
                                           np.random.randint(0, R, 100),
