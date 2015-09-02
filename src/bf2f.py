@@ -39,6 +39,8 @@ NORMALISE=False
 #ETYPE='euclidean'
 ETYPE='dot'
 #ETYPE='angular'
+# code for unobserved relationship
+MISS_R=-1
 
 # --- helper fns --- #
 def clean_word(word):
@@ -883,6 +885,7 @@ def train(training_data, start_parameters, options,
     # a fixed permutation, for testing my strange likelihood ratio thing
     W_perm = dict(enumerate(np.random.permutation(W)))
     R_perm = dict(enumerate(np.random.permutation(R)))
+    R_perm[-1] = -1
     # record sampling frequencies
     #sampled_counts = dict((i, 0) for i in xrange(W))
     n = 0
@@ -923,7 +926,17 @@ def train(training_data, start_parameters, options,
             if EXACT:
                 delta_model = Z_gradient(parameters)
                 prefactor = float(B)
-            delta_data = parameters.visible_batch_gradient(batch, omega)
+            # split into visible R and no R
+            visible_mask = batch[:,1] != MISS_R
+            visible_batch = batch[visible_mask, :]
+            delta_visible_data = parameters.visible_batch_gradient(visible_batch, omega)
+            noR_batch = batch[~visible_mask, :]
+            delta_noR_data = parameters.noR_batch_gradient(noR_batch, omega)
+            # combine
+            delta_data = (delta_visible_data[0] + delta_noR_data[0],
+                          delta_visible_data[1] + delta_noR_data[1],
+                          delta_visible_data[2] + delta_noR_data[2])
+            # combine with model samples to get final gradients
             delta_params = combine_gradients(delta_data, delta_model, prefactor)
             if ADAM:
                 mu_t = mu_t*LAMBDA
