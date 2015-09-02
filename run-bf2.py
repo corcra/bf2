@@ -1,14 +1,12 @@
 #!/bin/python
-# The independent implementation is growing in size.
-# 
+# Helper script to train a model.
+
 import bf2f as bf2f
 import cProfile
 import re
 from subprocess import call
 import sys
 import os.path
-
-DATA = 'cfg'
 
 #ONLINE=True
 ONLINE=False
@@ -80,7 +78,7 @@ else:
     B = 100
     S = 100
     M = 5
-    D = 1000
+    D = 100
     K = 1
     d = 100
     vali_set_size = 3
@@ -114,43 +112,43 @@ else:
         print value, '\t:', key
     # note that some of these options are not used by bf2f
 
-if 'name' in options:
+if 'output_root' in options:
     # THIS IS DANGEROUS
-    fname = options['name']
-    if 'batch' in fname:
+    output_root = options['output_root']
+    if 'batch' in output_root:
         assert not ONLINE
-    if 'inexact' in fname:
+    if 'inexact' in output_root:
         assert not EXACT
-    if 'nonpersistent' in fname:
+    if 'nonpersistent' in output_root:
         assert not PERSISTENT
-    if 'noise' in fname:
+    if 'noise' in output_root:
         assert NOISE
-    if 'ADAM' in fname:
+    if 'ADAM' in output_root:
         assert bf2f.ADAM
-    if 'SGD' in fname:
+    if 'SGD' in output_root:
         assert bf2f.SGD
 else:
-    fname = outroot+'/'+DATA+'_'+online_or_batch+'_'+exact_or_not+'_'+persistent_or_not+'_'+str(d)+'d_'+train_method+'_'+normed+'_'+etype
-    options['name'] = fname
-paramfile = fname+'_XXX.txt'
-valifile = fname+'_valiset.txt'
-optionsfile = fname+'_options.txt'
+    output_root = outroot+'/'+online_or_batch+'_'+exact_or_not+'_'+persistent_or_not+'_'+str(d)+'d_'+train_method+'_'+normed+'_'+etype
+    options['output_root'] = output_root
+paramfile = output_root+'_XXX.txt'
+valifile = output_root+'_valiset.txt'
+optionsfile = output_root+'_options.txt'
    
 # --- datafiles --- #
 
 # overwrite from the options file
 # WARNING: DANGEROUS
-if 'dpath' in options:
-    dpath = options['dpath']
+if 'training_data_path' in options:
+    training_data_path = options['training_data_path']
 else:
     print 'No training data provided, using toy data.'
-    W, R = 1000, 5
-    dpath = droot+'/w'+str(W)+'r'+str(R)+'_train.txt.gz'
-    if not os.path.isfile(dpath):
+    W, R = 10, 2
+    training_data_path = droot+'/w'+str(W)+'r'+str(R)+'_train.txt.gz'
+    if not os.path.isfile(training_data_path):
         # create data if it doesn't exist
         bf2f.generate_traindata(droot, W, R)
-        assert os.path.isfile(dpath)
-    options['dpath'] = dpath
+        assert os.path.isfile(training_data_path)
+    options['training_data_path'] = training_data_path
 
 # save the options
 fo = open(optionsfile,'w')
@@ -161,7 +159,7 @@ for (option, value) in options.iteritems():
 fo.close()
 
 # --- initialise things --- #
-dstream = bf2f.data_stream(dpath)
+dstream = bf2f.data_stream(training_data_path)
 W, R = dstream.get_vocab_sizes()
 if W == 5 and d == 3:
     C = bf2f.np.array([[ 0.01481961, -0.01517603,  0.00596634,  1.        ],
@@ -243,7 +241,7 @@ if CALC_LL:
 
 # --- start the logfile --- #
 if DIAGNOSTICS:
-    logf = open(fname+'_logfile.txt','w')
+    logf = open(output_root+'_logfile.txt','w')
     logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\tperm_energy\tC_lens\tG_lens\tV_lens\n')
     logf.close()
 else:
@@ -274,4 +272,4 @@ if CALC_LL:
 
 if DIAGNOSTICS:
     # --- sure let's just call R --- #
-    call('R --slave --file=plot_logfile.R --args '+fname+'_logfile.txt', shell=True)
+    call('R --slave --file=plot_logfile.R --args '+output_root+'_logfile.txt', shell=True)

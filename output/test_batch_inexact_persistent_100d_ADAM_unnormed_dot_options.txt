@@ -1,0 +1,19 @@
+vali_set_size 3
+diagnostics_rate 100
+trans_rela True
+tau (0.0, 0.0, 0.0)
+training_data_path ./data/w10r2_train.txt.gz
+fix_relas False
+num_samples 5
+batch_size 100
+n_epochs 1
+mu (0.90000000000000002, 0.90000000000000002, 0.90000000000000002)
+gibbs_iterations 1
+fix_words False
+offset 0
+calculate_ll True
+sampling_rate 100
+alpha (0.01, 0.01, 0.01)
+dimension 3
+nu (0.999, 0.999, 0.999)
+output_root ./output/test_batch_inexact_persistent_100d_ADAM_unnormed_dot

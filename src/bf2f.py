@@ -83,7 +83,9 @@ def load_options(options_path):
     options['mu'] = np.array(options['mu'])
     options['nu'] = np.array(options['nu'])
     options['alpha'] = np.array(options['alpha'])
-    options['omega'] = np.array(options['omega'])
+    # optional
+    if 'omega' in options:
+        options['omega'] = np.array(options['omega'])
     return options
 
 def generate_traindata(droot, W, R):
@@ -811,8 +813,8 @@ def train(training_data, start_parameters, options,
     mu_t = mu[:]
     alpha = alpha0[:]
     tau = options['tau']
-    name = options['name']
-    print name
+    output_root = options['output_root']
+    print output_root
     offset = options['offset']
     try:
         vali_set_size = options['vali_set_size']
@@ -829,7 +831,7 @@ def train(training_data, start_parameters, options,
     else:
         parameters = start_parameters
     # diagnostic things
-    logf = open(name+'_logfile.txt','a')
+    logf = open(output_root+'_logfile.txt','a')
     W = parameters.W
     R = parameters.R
     try:
@@ -946,12 +948,12 @@ def train(training_data, start_parameters, options,
                 #devset_accuracy(devpath, devlogpath, parameters, n + offset)
                 # endyolo
             if n%(D*10) == 0:
-                parameters.save(name+'_XXX.npy')
+                parameters.save(output_root+'_XXX.npy')
                 if VERBOSE:
-                    print 'Saved parameters to', name+'_XXX.npy'
+                    print 'Saved parameters to', output_root+'_XXX.npy'
     logf.close()
     if VERBOSE: print 'Training done,', n, 'examples seen.'
-    parameters.save(name+'_XXX.npy')
+    parameters.save(output_root+'_XXX.npy')
     options['alpha'] = alpha
     options['offset'] += n
     return vali_set
