@@ -339,6 +339,71 @@ class params(object):
             sys.exit('ERROR: Not implemented')
         return dE_C, dE_G, dE_V
 
+    def noR_batch_gradient(self, batch, omega):
+        """
+        In the case of training examples with *unknown* relationship 
+            (so triples missing the R term),
+        the contribution to the gradient is a weighted sum of derivatives,
+        weighted by the conditional probability of the missing relationship.
+
+        In this case, we need to calculate grad_E at many more locations
+            (R times as many, for each S,T pair)
+        and then create a weighted contribution.
+
+        Note that batch is assumed to have shape[1] == 3, but its 2nd column
+        is empty/nonsense.
+        """
+        W = self.W
+        R = self.R
+        d = self.d
+        dC_batch = np.zeros(shape=(W, d+1))
+        dG_batch = np.zeros(shape=(R, d+1, d+1))
+        dV_batch = np.zeros(shape=(W, d+1))
+        # create virtual batch (repeat each entry R times)
+        b = batch.shape[0]
+        virtual_batch = batch.repeat(R, axis=0)
+        virtual_batch[:, 1] = range(R)*b
+        # get virtual grads
+        dE_C_virtual_batch, dE_G_virtual_batch, dE_V_virtual_batch = self.grad_E(virtual_batch)
+        # iterate through, calculating weighting factors (conditional probability of R)
+        for (i, (s, _, t)) in enumerate(batch):
+            energy = self.E_axis((s, _, t), 'G')
+            expmE = np.exp(-energy)
+            # omega is an additional weighting here - note, this definitely
+            # messes up the probabilistic interpretation of this step
+            probs = (expmE/np.sum(expmE))*omega
+            dC_batch[s, :] -= np.dot(probs, dE_C_virtual_batch[i:(i+R), :])
+            dG_batch[:, :, :] -= probs.reshape(-1, 1, 1)*dE_G_virtual_batch[i:(i+R), :, :]
+            dV_batch[t, :] -= np.dot(probs, dE_V_virtual_batch[i:(i+R), :])
+        return (dC_batch, dG_batch, dV_batch)
+
+    def visible_batch_gradient(self, batch, omega):
+        """
+        Gradient is a difference of contributions from:
+        1. data distribution (batch of training examples)
+        2. model distribution (batch of model samples)
+        In both cases, we need to evaluate a gradient over a batch of triples.
+        This is a general function for both tasks
+        (so we expect to call it twice for each 'true' gradient evaluation.)
+
+        omega is a vector of weights associated with relationships
+        (length = R)
+        each gradient contribution is scaled by omega_r
+        """
+        W = self.W
+        R = self.R
+        d = self.d
+        dC_batch = np.zeros(shape=(W, d+1))
+        dG_batch = np.zeros(shape=(R, d+1, d+1))
+        dV_batch = np.zeros(shape=(W, d+1))
+        dE_C_batch, dE_G_batch, dE_V_batch = self.grad_E(batch)
+        for (i, (s, r, t)) in enumerate(batch):
+            prefactor = omega[r]
+            dC_batch[s, :] -= prefactor*dE_C_batch[i]
+            dG_batch[r, :, :] -= prefactor*dE_G_batch[i]
+            dV_batch[t, :] -= prefactor*dE_V_batch[i]
+        return (dC_batch, dG_batch, dV_batch)
+
     def E_axis(self, triple, switch):
         """
         Returns energies over an axis (S, R, T) given two of the triple.
@@ -731,32 +796,7 @@ def Z_gradient(parameters):
     dV_partition /= Z
     return dC_partition, dG_partition, dV_partition
 
-def batch_gradient(parameters, batch, omega):
-    """
-    Gradient is a difference of contributions from:
-    1. data distribution (batch of training examples)
-    2. model distribution (batch of model samples)
-    In both cases, we need to evaluate a gradient over a batch of triples.
-    This is a general function for both tasks
-    (so we expect to call it twice for each 'true' gradient evaluation.)
 
-    omega is a vector of weights associated with relationships
-    (length = R)
-    each gradient contribution is scaled by omega_r
-    """
-    W = parameters.W
-    R = parameters.R
-    d = parameters.d
-    dC_batch = np.zeros(shape=(W, d+1))
-    dG_batch = np.zeros(shape=(R, d+1, d+1))
-    dV_batch = np.zeros(shape=(W, d+1))
-    dE_C_batch, dE_G_batch, dE_V_batch = parameters.grad_E(batch)
-    for (i, (s, r, t)) in enumerate(batch):
-        prefactor = omega[r]
-        dC_batch[s, :] -= prefactor*dE_C_batch[i]
-        dG_batch[r, :, :] -= prefactor*dE_G_batch[i]
-        dV_batch[t, :] -= prefactor*dE_V_batch[i]
-    return (dC_batch, dG_batch, dV_batch)
 
 def combine_gradients(delta_data, delta_model, prefactor):
     """
@@ -877,13 +917,13 @@ def train(training_data, start_parameters, options,
                     #sampled_counts[sampled_triple[2]] += 1
             # yolo
             #print sampled_counts.values()
-            delta_model = batch_gradient(parameters, samples, omega)
+            delta_model = parameters.visible_batch_gradient(samples, omega)
             prefactor = float(B)/len(samples)
         if n%B == 0 and n > S:
             if EXACT:
                 delta_model = Z_gradient(parameters)
                 prefactor = float(B)
-            delta_data = batch_gradient(parameters, batch, omega)
+            delta_data = parameters.visible_batch_gradient(batch, omega)
             delta_params = combine_gradients(delta_data, delta_model, prefactor)
             if ADAM:
                 mu_t = mu_t*LAMBDA
