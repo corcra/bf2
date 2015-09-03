@@ -29,7 +29,7 @@ if THEANO:
 # (this may help with training with multiple epochs...)
 SHUFFLE=True
 # fancier optimization scheme (http://arxiv.org/pdf/1412.6980.pdf)
-ADAM=True
+ADAM=False
 if ADAM:
     EPSILON=1e-8
     LAMBDA=(1-1e-8)
@@ -88,6 +88,28 @@ def load_options(options_path):
     # optional
     if 'omega' in options:
         options['omega'] = np.array(options['omega'])
+    # set some defaults
+    if not 'online' in options:
+        options['online'] = True
+    if not 'exact' in options:
+        options['exact'] = False
+    if not 'persistent' in options:
+        options['persistent'] = True
+    if not 'noise' in options:
+        options['noise'] = False
+    # check sanity
+    if 'batch' in options['output_root']:
+        assert not options['online']
+    if 'inexact' in options['output_root']:
+        assert not options['exact']
+    if 'nonpersistent' in options['output_root']:
+        assert not options['persistent']
+    if 'noise' in options['output_root']:
+        assert options['noise']
+    if 'ADAM' in options['output_root']:
+        assert ADAM
+    if 'SGD' in options['output_root']:
+        assert not ADAM
     return options
 
 def generate_traindata(droot, W, R):
@@ -245,7 +267,7 @@ class params(object):
         if not self.fix_relas:
             self.G_vel = muG*self.G_vel + (1-muG)*gradG
             # regularise (REGOPT 2)
-            self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+            #self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         if ADAM:
             nuC, nuG, nuV = nu
             # accels (elementwise squaring)
