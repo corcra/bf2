@@ -275,7 +275,6 @@ class params(object):
         # special type of relationship (translations only)
         self.trans_rela = trans_rela
 
-        
     def update(self, grad_parameters, alpha, mu, nu=None, kappa=0.01):
         """
         Updates parameters.
@@ -294,7 +293,7 @@ class params(object):
         if not self.fix_relas:
             self.G_vel = muG*self.G_vel + (1-muG)*gradG
             # regularise (REGOPT 2)
-            self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+            #self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         if ADAM:
             nuC, nuG, nuV = nu
             # accels (elementwise squaring)
@@ -319,7 +318,7 @@ class params(object):
             # may change the final solution...
             deltaG = self.G_vel/(np.sqrt(self.G_acc) + EPSILON)
             # regularise (REGOPT 3)
-            #deltaG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+            deltaG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
             deltaV = self.V_vel/(np.sqrt(self.V_acc) + EPSILON)
         else:
             deltaC = self.C_vel
@@ -853,8 +852,6 @@ def Z_gradient(parameters):
     dV_partition /= Z
     return dC_partition, dG_partition, dV_partition
 
-
-
 def combine_gradients(delta_data, delta_model, prefactor):
     """
     Just combines two triples...
@@ -951,7 +948,7 @@ def train(training_data, start_parameters, options, VERBOSE=True):
         if len(vali_set) < vali_set_size and not example[1] == MISS_R:
             vali_set.add(tuple(example))
             continue
-        if len(vali_set) == vali_set_size:
+        if len(vali_set) == vali_set_size - 1:
             perm_vali_batch = permute_batch(W_perm, R_perm, np.array(list(vali_set)))
         # explanation for this:
         # in W=5 dataset, if you exclude vali_set, you lose a significant %
