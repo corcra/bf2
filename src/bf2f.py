@@ -25,9 +25,6 @@ if THEANO:
     from bf2f_theano_params import *
 # yolo
 #linn = mp.ProcessingPool(5)
-# every time the ENTIRE training dataset is pulled in, shuffle it!
-# (this may help with training with multiple epochs...)
-SHUFFLE=True
 # fancier optimization scheme (http://arxiv.org/pdf/1412.6980.pdf)
 ADAM=False
 if ADAM:
@@ -180,9 +177,11 @@ class data_stream(object):
         else:
             sys.exit('ERROR: data file incorrectly formatted.')
         return W, R
-    def acquire_all(self):
+    def acquire_all(self, SHUFFLE=True):
         """
         Just suck it all in!
+        By default, we shuffle the training data.
+        (this may help with multiple epochs)
         """
         traindata = [[0, 0, 0]]
         if '.gz' in self.path:
@@ -257,7 +256,7 @@ class params(object):
         # unwrap
         gradC, gradG, gradV = grad_parameters
         # regularise (REGOPT 1)
-        #gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+        gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
