@@ -293,7 +293,7 @@ class params(object):
         if not self.fix_relas:
             self.G_vel = muG*self.G_vel + (1-muG)*gradG
             # regularise (REGOPT 2)
-            #self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+            self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         if ADAM:
             nuC, nuG, nuV = nu
             # accels (elementwise squaring)
@@ -318,7 +318,7 @@ class params(object):
             # may change the final solution...
             deltaG = self.G_vel/(np.sqrt(self.G_acc) + EPSILON)
             # regularise (REGOPT 3)
-            deltaG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+            #deltaG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
             deltaV = self.V_vel/(np.sqrt(self.V_acc) + EPSILON)
         else:
             deltaC = self.C_vel
@@ -919,6 +919,7 @@ def train(training_data, start_parameters, options, VERBOSE=True):
         vali_set_size = 1000
     # initialise
     vali_set = set()
+    vali_set_done = False
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(M, 3),dtype=np.int)
@@ -948,14 +949,12 @@ def train(training_data, start_parameters, options, VERBOSE=True):
         if len(vali_set) < vali_set_size and not example[1] == MISS_R:
             vali_set.add(tuple(example))
             continue
-        if len(vali_set) == vali_set_size - 1:
+        if len(vali_set) == vali_set_size and not vali_set_done:
             perm_vali_batch = permute_batch(W_perm, R_perm, np.array(list(vali_set)))
-        # explanation for this:
-        # in W=5 dataset, if you exclude vali_set, you lose a significant %
-        # of the training data...
-        if not W == 5:
-            if tuple(example) in vali_set:
-                continue
+            vali_set_done = True
+        # do not train on validation set
+        if tuple(example) in vali_set:
+            continue
         batch[n%B, :] = example
         #yolo
         #sampled_counts[example[0]] +=1
