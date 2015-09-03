@@ -283,7 +283,7 @@ class params(object):
         # unwrap
         gradC, gradG, gradV = grad_parameters
         # regularise (REGOPT 1)
-        #gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+        gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
@@ -293,7 +293,7 @@ class params(object):
         if not self.fix_relas:
             self.G_vel = muG*self.G_vel + (1-muG)*gradG
             # regularise (REGOPT 2)
-            self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+            #self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         if ADAM:
             nuC, nuG, nuV = nu
             # accels (elementwise squaring)
