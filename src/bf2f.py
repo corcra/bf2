@@ -26,7 +26,7 @@ if THEANO:
 # yolo
 #linn = mp.ProcessingPool(5)
 # fancier optimization scheme (http://arxiv.org/pdf/1412.6980.pdf)
-ADAM=False
+ADAM=True
 if ADAM:
     EPSILON=1e-8
     LAMBDA=(1-1e-8)
@@ -51,7 +51,7 @@ def clean_word(word):
     word4 = word3.rstrip(' ')
     return word4
 
-def load_options(options_path):
+def load_options(options_path, verbose=False):
     # BRITTLE
     print 'Reading options from',  options_path
     options_raw = open(options_path, 'r').readlines()
@@ -107,6 +107,9 @@ def load_options(options_path):
         assert ADAM
     if 'SGD' in options['output_root']:
         assert not ADAM
+    if verbose:
+        for (name, value) in options.iteritems():
+            print value, '\t:', name
     return options
 
 def generate_traindata(droot, W, R):
@@ -222,17 +225,41 @@ class params(object):
             self.R = G.shape[0]
             self.d = C.shape[1] - 1
             # vocab
-            try:
+            if type(vocab) == tuple:
+                # assume a tuple of PATHs has been given
+                # words first
+                wordlist_path = vocab[0]
+                words_raw = open(wordlist_path, 'r').readlines()
+                words = ['']*len(words_raw)
+                for line in words_raw:
+                    index = int(line.split()[0])
+                    word = line.split()[1]
+                    words[index] = word
+                # relas first
+                relalist_path = vocab[1]
+                relas_raw = open(relalist_path, 'r').readlines()
+                relas = ['']*len(relas_raw)
+                for line in relas_raw:
+                    index = int(line.split()[0])
+                    rela = line.split()[1]
+                    relas[index] = rela
+                # assign
+                self.words = words
+                self.relas = relas
+            elif type(vocab) == dict:
                 self.words = vocab['words']
                 self.relas = vocab['relas']
-            except TypeError:
+            elif vocab is None:
                 # no vocab
                 self.words = map(str, range(self.W))
                 self.relas = map(str, range(self.R))
+            else:
+                sys.exit('ERROR: vocab is of unexpected type. Aborting.')
             # weights
             self.C = deepcopy(C)
             self.G = deepcopy(G)
             self.V = deepcopy(V)
+        # these things are set regardless of status of initial parameters
         # velocities (this is m_t in Adam paper)
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
@@ -248,6 +275,7 @@ class params(object):
         # special type of relationship (translations only)
         self.trans_rela = trans_rela
 
+        
     def update(self, grad_parameters, alpha, mu, nu=None, kappa=0.01):
         """
         Updates parameters.
@@ -256,7 +284,7 @@ class params(object):
         # unwrap
         gradC, gradG, gradV = grad_parameters
         # regularise (REGOPT 1)
-        gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+        #gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
@@ -266,7 +294,7 @@ class params(object):
         if not self.fix_relas:
             self.G_vel = muG*self.G_vel + (1-muG)*gradG
             # regularise (REGOPT 2)
-            #self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+            self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         if ADAM:
             nuC, nuG, nuV = nu
             # accels (elementwise squaring)
