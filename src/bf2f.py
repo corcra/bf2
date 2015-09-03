@@ -880,8 +880,7 @@ def permute_batch(word_perm, rela_perm, batch):
         mapped_batch[i] = (word_perm[s], rela_perm[r], word_perm[t])
     return mapped_batch
 
-def train(training_data, start_parameters, options,
-          EXACT=False, PERSISTENT=True, NOISE=False, VERBOSE=True):
+def train(training_data, start_parameters, options, VERBOSE=True):
     """
     Perform (stochastic) gradient ascent on the parameters.
     INPUTS:
@@ -892,9 +891,12 @@ def train(training_data, start_parameters, options,
         parameters      triple of (C, G, V)
         [[ some measure of convergence ]]
     """
+    # unwrap options
+    EXACT = options['exact']
+    PERSISTENT = options['persistent']
+    NOISE = options['noise']
     if NOISE: EXACT=False
     if EXACT or NOISE: PERSISTENT=False
-    # unwrap options
     B = options['batch_size']
     S = options['sampling_rate']
     M = options['num_samples']
