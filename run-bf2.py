@@ -21,6 +21,8 @@ if EXACT or NOISE: PERSISTENT=False
 CALC_LL = False
 #CALC_LL=not(ONLINE)
 
+bf2f.np.random.seed(1337)
+
 # --- paths --- #
 outroot = './output'
 droot = './data'
@@ -126,7 +128,7 @@ if 'output_root' in options:
     if 'ADAM' in output_root:
         assert bf2f.ADAM
     if 'SGD' in output_root:
-        assert bf2f.SGD
+        assert not bf2f.ADAM
 else:
     output_root = outroot+'/'+online_or_batch+'_'+exact_or_not+'_'+persistent_or_not+'_'+str(d)+'d_'+train_method+'_'+normed+'_'+etype
     options['output_root'] = output_root
@@ -237,7 +239,8 @@ pp = bf2f.params((C, G, V), vocab, fix_words=fix_words, fix_relas=fix_relas, tra
 
 # --- ll before --- #
 if CALC_LL:
-    print 'pre ll:', bf2f.log_likelihood(pp, train_data)
+    pre_ll = bf2f.log_likelihood(pp, train_data)
+    print 'pre ll:', pre_ll
 
 # --- start the logfile --- #
 if DIAGNOSTICS:
@@ -250,7 +253,7 @@ else:
 # ---- TRAIN! --- #
 for epoch in xrange(n_epochs):
     print 'epoch:', epoch
-    cProfile.runctx('vali_set = bf2f.train(train_data, pp, options, EXACT, PERSISTENT, NOISE)', None, locals())
+    cProfile.runctx('vali_set = bf2f.train(train_data, pp, options)', None, locals())
     if ONLINE:
         # (the purpose of this is to shuffle the training data)
         train_data = dstream.acquire_all()
@@ -268,7 +271,8 @@ vf.close()
 
 # --- ll after --- #
 if CALC_LL:
-    print 'post ll:', bf2f.log_likelihood(pp, train_data)
+    post_ll =  bf2f.log_likelihood(pp, train_data)
+    print 'post ll:', post_ll
 
 if DIAGNOSTICS:
     # --- sure let's just call R --- #
