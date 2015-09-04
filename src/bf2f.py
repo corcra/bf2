@@ -80,6 +80,8 @@ class options(dict):
         self['normalise'] = False
         self['etype'] = 'dot'
         self['calc_ll'] = False
+        self['wordlist'] = None
+        self['relalist'] = None
         # need to input the rest of the defaults
         # (every possible option should be initialised here somehow)
     def pretty_print(self):
@@ -136,6 +138,7 @@ class options(dict):
             print 'Options saved to', path
     def check(self, verbose=False):
         """ sanity check """
+        # hard constraints
         if not 'training_data_path' in self:
             sys.exit('ERROR: missing training_data_path')
         if 'batch' in self['output_root']:
@@ -150,6 +153,13 @@ class options(dict):
             assert self['adam']
         if 'SGD' in self['output_root']:
             assert not self['adam']
+        # soft warnings
+        if self['wordlist'] is None:
+            print 'WARNING: wordlist doesn\'t exist.'
+        if self['relalist'] is None:
+            print 'WARNING: relalist doesn\'t exist.'
+        if self['diagnostics_rate'] <= 0:
+            print 'WARNING: no diagnostics.'
         if verbose:
             print 'Options passed all checks.'
     
@@ -240,32 +250,34 @@ class params(object):
             # vocab
             if type(vocab) == tuple:
                 # assume a tuple of PATHs has been given
-                # words first
-                wordlist_path = vocab[0]
-                words_raw = open(wordlist_path, 'r').readlines()
-                words = ['']*len(words_raw)
-                for line in words_raw:
-                    index = int(line.split()[0])
-                    word = line.split()[1]
-                    words[index] = word
-                # relas first
-                relalist_path = vocab[1]
-                relas_raw = open(relalist_path, 'r').readlines()
-                relas = ['']*len(relas_raw)
-                for line in relas_raw:
-                    index = int(line.split()[0])
-                    rela = line.split()[1]
-                    relas[index] = rela
+                if not vocab[0] is None:
+                    # words first
+                    wordlist_path = vocab[0]
+                    words_raw = open(wordlist_path, 'r').readlines()
+                    words = ['']*len(words_raw)
+                    for line in words_raw:
+                        index = int(line.split()[0])
+                        word = line.split()[1]
+                        words[index] = word
+                else:
+                    words = map(str, range(self.W))
+                if not vocab[1] is None:
+                    # relas first
+                    relalist_path = vocab[1]
+                    relas_raw = open(relalist_path, 'r').readlines()
+                    relas = ['']*len(relas_raw)
+                    for line in relas_raw:
+                        index = int(line.split()[0])
+                        rela = line.split()[1]
+                        relas[index] = rela
+                else:
+                    relas = map(str, range(self.R))
                 # assign
                 self.words = words
                 self.relas = relas
             elif type(vocab) == dict:
                 self.words = vocab['words']
                 self.relas = vocab['relas']
-            elif vocab is None:
-                # no vocab
-                self.words = map(str, range(self.W))
-                self.relas = map(str, range(self.R))
             else:
                 sys.exit('ERROR: vocab is of unexpected type. Aborting.')
             # weights
