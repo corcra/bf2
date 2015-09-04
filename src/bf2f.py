@@ -125,6 +125,7 @@ class options(dict):
         self.check(verbose)
         if verbose:
             self.pretty_print()
+
     def save(self, path, verbose=False):
         """ save to a file """
         fo = open(path, 'w')
@@ -135,6 +136,7 @@ class options(dict):
         fo.close()
         if verbose:
             print 'Options saved to', path
+
     def check(self, verbose=False):
         """ sanity check """
         # hard constraints
