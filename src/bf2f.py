@@ -35,7 +35,6 @@ def clean_word(word):
     word4 = word3.rstrip(' ')
     return word4
 
-
 def generate_traindata(droot, W, R):
     # define joint probabilities of all triples
     # not sure why i'm using a beta distribution but w/e
@@ -626,6 +625,26 @@ class params(object):
         #    energy.append(-np.dot(self.C[triple[0]], np.dot(self.V[triple[2]], self.G[triple[1]])))
         return energy
 
+    def marginal(self, switch):
+        """
+        Calculates marginal distribution of a single type of var: S, R, T.
+        WARNING: may be *extremely* slow/memory intensive for big data.
+            (calculates partition function)
+        """
+        W = self.W
+        R = self.R
+        energies = self.E().reshape(W, R, W)
+        expmE = np.exp(-energies)
+        Z = np.sum(expmE)
+        if switch == 'C':
+            marginal_numerator = np.sum(expmE, axis=(1,2))
+        elif switch == 'G':
+            marginal_numerator = np.sum(expmE, axis=(0,2))
+        elif switch == 'V':
+            marginal_numerator = np.sum(expmE, axis=(0,1))
+        marginal_distribution = marginal_numerator/Z
+        return marginal_distribution 
+
     def sample(self, seed, K):
         """
         Draws samples from the model, given a (single!) seed.
@@ -974,7 +993,6 @@ def train(training_data, start_parameters, options, VERBOSE=True):
     for example in training_data:
         if len(vali_set) < vali_set_size and not example[1] == MISS_R:
             vali_set.add(tuple(example))
-            continue
         if len(vali_set) == vali_set_size and not vali_set_done:
             perm_vali_batch = permute_batch(W_perm, R_perm, np.array(list(vali_set)))
             vali_set_done = True
@@ -1034,14 +1052,23 @@ def train(training_data, start_parameters, options, VERBOSE=True):
                     #ll = log_likelihood(parameters, vali_set)
                 else:
                     ll = 'NA'
-                data_energy = np.mean(parameters.E(visible_batch))
-                vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
+                if len(visible_batch) > 0:
+                    data_energy = np.mean(parameters.E(visible_batch))
+                else:
+                    data_energy = 'NA'
+                if len(vali_set) > 0:
+                    vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
+                else:
+                    vali_energy = 'NA'
                 random_lox = np.array(zip(np.random.randint(0, W, 100),
                                           np.random.randint(0, R, 100),
                                           np.random.randint(0, W, 100)))
                 rand_energy = np.mean(parameters.E(random_lox))
                 # so this is different to the rand, cause it's a permuted version of the validation set
-                perm_energy = np.mean(parameters.E(perm_vali_batch))
+                if vali_set_done:
+                    perm_energy = np.mean(parameters.E(perm_vali_batch))
+                else:
+                    perm_energy = 'NA'
                 if PERSISTENT:
                     model_energy = np.mean(parameters.E(samples))
                 else:
