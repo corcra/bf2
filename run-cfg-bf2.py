@@ -8,29 +8,24 @@ import re
 from subprocess import call
 import sys
 
-try:
-    cfg_path = sys.argv[1]
-except IndexError:
-    sys.exit('ERROR: requires cfg file.')
-
 bf2f.np.random.seed(1337)
 
 # --- load options --- #
 options = bf2f.options()
-options.load(cfg_path, verbose=True)
+try:
+    options.load(sys.argv[1], verbose=True)
+except IndexError:
+    sys.exit('ERROR: requires cfg file.')
 
 # --- unroll options --- #
 output_root = options['output_root']
+training_data_path = options['training_data_path']
+vocab = (options['wordlist'], options['relalist'])
 
 # --- save the options --- #
-optionsfile_path = output_root+'_options.txt'
-options.save(optionsfile_path)
+options.save(output_root+'_options.txt')
 
 # --- training data --- #
-try:
-    training_data_path = options['training_data_path']
-except KeyError:
-    sys.exit('ERROR: training_data_path missing in options file')
 dstream = bf2f.data_stream(training_data_path)
 
 if options['online']:
@@ -47,11 +42,10 @@ except KeyError:
     # create random
     W, R = dstream.get_vocab_sizes()
     d = options['dimension']
-    # C
+    # C, V
     C = bf2f.np.random.normal(scale=0.1, size=(W, d+1))
-    C[:,-1] = 1
-    # V
     V = bf2f.np.random.normal(scale=0.1, size=(W, d+1))
+    C[:,-1] = 1
     V[:,-1] = 1
     # G
     G = bf2f.np.random.normal(scale=0.01, size=(R, d+1, d+1))
@@ -64,16 +58,6 @@ if options['diagnostics_rate'] > 0:
     DIAGNOSTICS = True
 else:
     DIAGNOSTICS = False
-
-# --- get vocabulary (words, relationships) --- #
-try:
-    # pass paths to initialise
-    wordlist = options['wordlist']
-    relalist = options['relalist']
-    vocab = (wordlist, relalist)
-except KeyError:
-    print 'WARNING: wordlist or relalist doesn\'t exist.'
-    vocab = None
 
 # --- initialise parameters --- #
 pp = bf2f.params(initial_params, options, vocab)
@@ -88,23 +72,18 @@ if DIAGNOSTICS:
     logf = open(output_root+'_logfile.txt','w')
     logf.write('n\ttime\tll\tdata_energy\tmodel_energy\tvaliset_energy\trandom_energy\tperm_energy\tC_lens\tG_lens\tV_lens\n')
     logf.close()
-else:
-    print 'WARNING: no diagnostics.'
 
 # ---- TRAIN! --- #
 for epoch in xrange(options['n_epochs']):
     print 'epoch:', epoch
     cProfile.runctx('vali_set = bf2f.train(train_data, pp, options)', None, locals())
     if options['online']:
-        # (the purpose of this is to shuffle the training data)
-        train_data = dstream.acquire_all()
+        train_data = dstream.acquire_all(SHUFFLE=True)
 
 # --- save n stuff --- #
-paramfile = output_root+'_XXX.txt'
-pp.save(paramfile)
+pp.save(output_root+'_XXX.txt')
 
-valifile = output_root+'_valiset.txt'
-vf = open(valifile,'w')
+vf = open(output_root+'_valiset.txt','w')
 for triple in vali_set:
     vf.write(' '.join(map(str, triple))+'\n')
 vf.close()
