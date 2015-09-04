@@ -17,25 +17,9 @@ from copy import deepcopy
 from math import pi
 
 # --- CONSTANTS --- #
-THEANO=False
-if THEANO:
-    print 'WARNING: Asking for theano functions, but they are not declared here.'
-    from theano import function, shared, scan
-    import theano.tensor as tten
-    from bf2f_theano_params import *
-# yolo
-#linn = mp.ProcessingPool(5)
-# fancier optimization scheme (http://arxiv.org/pdf/1412.6980.pdf)
-ADAM=True
-if ADAM:
-    EPSILON=1e-8
-    LAMBDA=(1-1e-8)
-# normalise vectors to 1, matrices to have max element = 1 (weird, weird)
-NORMALISE=False
-# energy type
-#ETYPE='euclidean'
-ETYPE='dot'
-#ETYPE='angular'
+# ADAM settings... (http://arxiv.org/pdf/1412.6980.pdf)
+EPSILON=1e-8
+LAMBDA=(1-1e-8)
 # code for unobserved relationship
 MISS_R=9999
 
@@ -51,66 +35,6 @@ def clean_word(word):
     word4 = word3.rstrip(' ')
     return word4
 
-def load_options(options_path, verbose=False):
-    # BRITTLE
-    print 'Reading options from',  options_path
-    options_raw = open(options_path, 'r').readlines()
-    options = dict()
-    for line in options_raw:
-        if '#' in line:
-            # skip 'comments'
-            continue
-        option_name = line.split(' ')[0]
-        option_value = ' '.join(line.split(' ')[1:])
-        # this is gross
-        if '(' in option_value:
-            value = tuple(map(float, re.sub('[\(\)]', '', option_value).split(',')))
-        elif '[' in option_value:
-            value = np.array(map(float, re.sub('[\[\]]', '', option_value).split(',')))
-        elif option_value == 'False\n':
-            value = False
-        elif option_value == 'True\n':
-            value = True
-        else:
-            try:
-                value = int(option_value)
-            except ValueError:
-                # not an int
-                value = option_value.strip()
-        options[option_name] = value
-    # make np arrays
-    options['mu'] = np.array(options['mu'])
-    options['nu'] = np.array(options['nu'])
-    options['alpha'] = np.array(options['alpha'])
-    # optional
-    if 'omega' in options:
-        options['omega'] = np.array(options['omega'])
-    # set some defaults
-    if not 'online' in options:
-        options['online'] = True
-    if not 'exact' in options:
-        options['exact'] = False
-    if not 'persistent' in options:
-        options['persistent'] = True
-    if not 'noise' in options:
-        options['noise'] = False
-    # check sanity
-    if 'batch' in options['output_root']:
-        assert not options['online']
-    if 'inexact' in options['output_root']:
-        assert not options['exact']
-    if 'nonpersistent' in options['output_root']:
-        assert not options['persistent']
-    if 'noise' in options['output_root']:
-        assert options['noise']
-    if 'ADAM' in options['output_root']:
-        assert ADAM
-    if 'SGD' in options['output_root']:
-        assert not ADAM
-    if verbose:
-        for (name, value) in options.iteritems():
-            print value, '\t:', name
-    return options
 
 def generate_traindata(droot, W, R):
     # define joint probabilities of all triples
@@ -140,6 +64,95 @@ def generate_traindata(droot, W, R):
     fo.close()
     return True
 
+# --- options object --- #
+class options(dict):
+    """
+    Class for object.
+    """
+    def __init__(self):
+        """ initialise all settings to defaults """
+        # default values
+        self['online'] = True
+        self['exact'] = False
+        self['persistent'] = True
+        self['noise'] = False
+        self['adam'] = True
+        self['normalise'] = False
+        self['etype'] = 'dot'
+        self['calc_ll'] = False
+        # need to input the rest of the defaults
+        # (every possible option should be initialised here somehow)
+    def pretty_print(self):
+        """ print out """
+        for (name, value) in self.iteritems():
+            print value, '\t:', name
+
+    def load(self, path, verbose=False):
+        # BRITTLE
+        print 'Reading options from',  path
+        options_raw = open(path, 'r').readlines()
+        options = dict()
+        for line in options_raw:
+            if '#' in line:
+                # skip 'comments'
+                continue
+            option_name = line.split(' ')[0]
+            option_value = ' '.join(line.split(' ')[1:])
+            # this is gross
+            if '(' in option_value:
+                value = tuple(map(float, re.sub('[\(\)]', '', option_value).split(',')))
+            elif '[' in option_value:
+                value = np.array(map(float, re.sub('[\[\]]', '', option_value).split(',')))
+            elif option_value == 'False\n':
+                value = False
+            elif option_value == 'True\n':
+                value = True
+            else:
+                try:
+                    value = int(option_value)
+                except ValueError:
+                    # not an int
+                    value = option_value.strip()
+            self[option_name] = value
+        # make np arrays
+        self['mu'] = np.array(self['mu'])
+        self['nu'] = np.array(self['nu'])
+        self['alpha'] = np.array(self['alpha'])
+        # optional
+        if 'omega' in self:
+            self['omega'] = np.array(self['omega'])
+        self.check(verbose)
+        if verbose:
+            self.pretty_print()
+    def save(self, path, verbose=False):
+        """ save to a file """
+        fo = open(path, 'w')
+        for (option_name, value) in self.iteritems():
+            if type(value) == np.ndarray:
+                value = tuple(value)
+            fo.write(option_name+' '+str(value)+'\n')
+        fo.close()
+        if verbose:
+            print 'Options saved to', path
+    def check(self, verbose=False):
+        """ sanity check """
+        if not 'training_data_path' in self:
+            sys.exit('ERROR: missing training_data_path')
+        if 'batch' in self['output_root']:
+            assert not self['online']
+        if 'inexact' in self['output_root']:
+            assert not self['exact']
+        if 'nonpersistent' in self['output_root']:
+            assert not self['persistent']
+        if 'noise' in self['output_root']:
+            assert self['noise']
+        if 'ADAM' in self['output_root']:
+            assert self['adam']
+        if 'SGD' in self['output_root']:
+            assert not self['adam']
+        if verbose:
+            print 'Options passed all checks.'
+    
 # --- data stream --- #
 class data_stream(object):
     """
@@ -206,8 +219,8 @@ class params(object):
     Parameter object.
     Contains C, G, V and velocities for all.
     """
-    def __init__(self, initial_parameters, vocab=None,
-                 fix_words=False, fix_relas=False, trans_rela=False):
+    def __init__(self, initial_parameters, options, vocab=None):
+        self.etype = options['etype']
         if type(initial_parameters) == str:
             # assume a PATH has been given
             params_path = initial_parameters
@@ -270,12 +283,13 @@ class params(object):
         self.V_acc = np.zeros(shape=self.V.shape)
         # fix some parameters?
         # (never update these)
-        self.fix_words = fix_words
-        self.fix_relas = fix_relas
+        self.fix_words = options['fix_words']
+        self.fix_relas = options['fix_relas']
         # special type of relationship (translations only)
-        self.trans_rela = trans_rela
+        self.trans_rela = options['trans_rela']
 
-    def update(self, grad_parameters, alpha, mu, nu=None, kappa=0.01):
+    def update(self, grad_parameters, alpha, mu, 
+               nu=None, kappa=0.01, ADAM=True, NORMALISE=False):
         """
         Updates parameters.
         Note: assumes alpha, mu, nu are pre-updated.
@@ -338,7 +352,7 @@ class params(object):
             else:
                 self.G += alphaG_hat*deltaG
         if NORMALISE:
-            # hax
+            # normalise vectors to 1, matrices to have max element = 1 (weird, weird)
             # the vectors are simple
             self.C[:, :-1] /= np.linalg.norm(self.C[:, :-1]).reshape(-1,1)
             self.V[:, :-1] /= np.linalg.norm(self.V[:, :-1]).reshape(-1,1)
@@ -355,12 +369,12 @@ class params(object):
         C_sub = self.C[locations[:, 0]]
         G_sub = self.G[locations[:, 1]]
         V_sub = self.V[locations[:, 2]]
-        if ETYPE == 'dot':
+        if self.etype == 'dot':
             # TODO: make this efficient
             dE_C = -np.einsum('...i,...ij', V_sub, G_sub)
             dE_G = -np.einsum('...i,...j', V_sub, C_sub)
             dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
-        elif ETYPE == 'euclidean':
+        elif self.etype == 'euclidean':
             # TODO: make efficient, probably
             # NOTE: applying G to V, not C
             GV_C = np.einsum('...ij,...j', G_sub, V_sub) - C_sub
@@ -369,7 +383,7 @@ class params(object):
             dE_C = 1*GV_C/lens
             dE_G = -np.einsum('...i,...j', GV_Cl, V_sub)
             dE_V = -np.einsum('...i,...ij', GV_Cl, G_sub)
-        elif ETYPE =='angular':
+        elif self.etype =='angular':
             # TODO: make efficient, probably
             # also test
             # NOTE: applying G to V, not C
@@ -470,13 +484,13 @@ class params(object):
             #GC = np.dot(self.C, self.G[r].T)
             #energy = -np.dot(GC, self.V[t])
             # note: above version is significantly slower than the below
-            if ETYPE == 'dot':
+            if self.etype == 'dot':
                 VG = np.dot(self.V[t], self.G[r])
                 energy = -np.dot(self.C, VG)
-            elif ETYPE == 'euclidean':
+            elif self.etype == 'euclidean':
                 GV = np.dot(self.G[r, :, :], self.V[t, :])
                 energy = -np.linalg.norm(GV - self.C, axis=1)
-            elif ETYPE == 'angular':
+            elif self.etype == 'angular':
                 GV = np.dot(self.G[r, :, :], self.V[t, :])
                 GVC = np.einsum('...j,...ij', GV, self.C)
                 GV_len = np.linalg.norm(GV)
@@ -485,13 +499,13 @@ class params(object):
             else: sys.exit('ERROR: Not implemented')
         elif switch == 'G':
             # return over all R
-            if ETYPE == 'dot':
+            if self.etype == 'dot':
                 VG = np.dot(self.V[t], self.G)
                 energy = -np.dot(VG, self.C[s])
-            elif ETYPE == 'euclidean':
+            elif self.etype == 'euclidean':
                 GV = np.dot(self.G[:, :, :], self.V[t, :])
                 energy = -np.linalg.norm(GV - self.C[s, :], axis=1)
-            elif ETYPE == 'angular':
+            elif self.etype == 'angular':
                 GV = np.dot(self.G[:, :, :], self.V[t, :])
                 GVC = np.einsum('...ij,...j', GV, self.C[s, :])
                 GV_len = np.linalg.norm(GV, axis=1)
@@ -500,13 +514,13 @@ class params(object):
             else: sys.exit('ERROR: Not implemented')
         elif switch == 'V':
             #return over all T
-            if ETYPE == 'dot':
+            if self.etype == 'dot':
                 GC = np.dot(self.G[r], self.C[s])
                 energy = -np.dot(self.V, GC)
-            elif ETYPE == 'euclidean':
+            elif self.etype == 'euclidean':
                 GV = np.einsum('...jk,...ik', self.G[r, :, :], self.V)
                 energy = -np.linalg.norm(GV - self.C[s, :], axis=1)
-            elif ETYPE == 'angular':
+            elif self.etype == 'angular':
                 GV = np.einsum('...jk,...ik', self.G[r,:, :], self.V)
                 GVC = np.dot(GV, self.C[s, :])
                 GV_len = np.linalg.norm(GV, axis=1)
@@ -522,11 +536,11 @@ class params(object):
         """
         The energy of a SINGLE triple.
         """
-        if ETYPE == 'dot':
+        if self.etype == 'dot':
             energy = -np.dot(self.V[triple[2]], np.dot(self.G[triple[1]], self.C[triple[0]]))
-        elif ETYPE == 'euclidean':
+        elif self.etype == 'euclidean':
             energy = -np.linalg.norm(np.dot(self.G[triple[1]], self.V[triple[2]]) - self.C[triple[0]])
-        elif ETYPE == 'angular':
+        elif self.etype == 'angular':
             GV = np.dot(self.G[triple[1]], self.V[triple[2]])
             GVC = np.dot(GV, self.C[triple[0]])
             GV_len = np.linalg.norm(GV)
@@ -565,8 +579,6 @@ class params(object):
         #energy = np.array(map(lambda (s, r, t): -np.dot(self.C[s], np.dot(self.V[t], self.G[r])), locations))
         # V5
         #energy = map(lambda i: -np.dot(V_sub[i], np.dot(G_sub[i], C_sub[i])), xrange(len(locations)))
-        # V6
-        #energy = linn.amap(self.E_triple, locations)
         # V7
         #parmz = []
         #for triple in locations:
@@ -582,17 +594,17 @@ class params(object):
             R = self.R
             locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
         energy = np.empty(shape=len(locations), dtype=np.float)
-        if ETYPE == 'dot':
+        if self.etype == 'dot':
             for (i, triple) in enumerate(locations):
                 energy[i] = -np.dot(self.C[triple[0]], 
                                     np.dot(self.V[triple[2]], 
                                            self.G[triple[1]]))
-        elif ETYPE == 'euclidean':
+        elif self.etype == 'euclidean':
             for (i, triple) in enumerate(locations):
                 energy[i] = -np.linalg.norm(np.dot(self.G[triple[1]], 
                                                    self.V[triple[2]]) -\
                                             self.C[triple[0]])
-        elif ETYPE == 'angular':
+        elif self.etype == 'angular':
             for (i, triple) in enumerate(locations):
                 energy[i] = self.E_triple(triple)
         else: sys.exit('ERROR: Not implemented')
@@ -892,6 +904,8 @@ def train(training_data, start_parameters, options, VERBOSE=True):
     EXACT = options['exact']
     PERSISTENT = options['persistent']
     NOISE = options['noise']
+    ADAM = options['adam']
+    NORMALISE = options['normalise']
     if NOISE: EXACT=False
     if EXACT or NOISE: PERSISTENT=False
     B = options['batch_size']
@@ -996,7 +1010,8 @@ def train(training_data, start_parameters, options, VERBOSE=True):
             else:
                 if not 0 in tau:
                     alpha = alpha0/(1+(n+offset)/(tau*B))
-            parameters.update(delta_params, alpha, mu_t, nu)
+            parameters.update(delta_params, alpha, mu_t,
+                              nu, ADAM=ADAM, NORMALISE=NORMALISE)
         if D > 0:
             # if D == 0 or < 0, this means NO DIAGNOSTICS ARE RUN
             # the reason this is an option is clearly speed
