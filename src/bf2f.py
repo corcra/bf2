@@ -946,7 +946,7 @@ def train(training_data, start_parameters, options, VERBOSE=True):
     M = options['num_samples']
     D = options['diagnostics_rate']
     K = options['gibbs_iterations']
-    calculate_ll = options['calculate_ll']
+    calc_ll = options['calc_ll']
     alpha0 = options['alpha']
     mu = options['mu']
     try:
@@ -1049,7 +1049,7 @@ def train(training_data, start_parameters, options, VERBOSE=True):
             # the reason this is an option is clearly speed
             if n%D == 0 and n > B and n > S:
                 t = time.time() - t0
-                if calculate_ll:
+                if calc_ll:
                     ll = log_likelihood(parameters, training_data)
                     #ll = log_likelihood(parameters, vali_set)
                 else:
