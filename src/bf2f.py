@@ -64,7 +64,7 @@ def generate_traindata(droot, W, R):
     return True
 
 # --- options object --- #
-class options(dict):
+class options_dict(dict):
     """
     Class for object.
     """
@@ -81,6 +81,9 @@ class options(dict):
         self['calc_ll'] = False
         self['wordlist'] = None
         self['relalist'] = None
+        self['fix_words'] = False
+        self['fix_relas'] = False
+        self['trans_rela'] = False
         # need to input the rest of the defaults
         # (every possible option should be initialised here somehow)
     def pretty_print(self):
@@ -230,7 +233,9 @@ class params(object):
     Parameter object.
     Contains C, G, V and velocities for all.
     """
-    def __init__(self, initial_parameters, options, vocab=None):
+    def __init__(self, initial_parameters, options=None, vocab=None):
+        if options is None:
+            options = options_dict()
         self.etype = options['etype']
         if type(initial_parameters) == str:
             # assume a PATH has been given
@@ -311,6 +316,9 @@ class params(object):
         gradC, gradG, gradV = grad_parameters
         # regularise (REGOPT 1)
         gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
+        # REGOPT ALL
+        #gradC[:, :-1] -= kappa*self.C[:, :-1]
+        #gradV[:, :-1] -= kappa*self.V[:, :-1]
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
