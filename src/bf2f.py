@@ -84,6 +84,7 @@ class options_dict(dict):
         self['fix_words'] = False
         self['fix_relas'] = False
         self['trans_rela'] = False
+        self['kappa'] = 0.01
         # need to input the rest of the defaults
         # (every possible option should be initialised here somehow)
     def pretty_print(self):
@@ -307,7 +308,7 @@ class params(object):
         self.trans_rela = options['trans_rela']
 
     def update(self, grad_parameters, alpha, mu, 
-               nu=None, kappa=0.01, ADAM=True, NORMALISE=False):
+               nu=None, kappa=0.0, ADAM=True, NORMALISE=False):
         """
         Updates parameters.
         Note: assumes alpha, mu, nu are pre-updated.
@@ -957,6 +958,7 @@ def train(training_data, start_parameters, options, VERBOSE=True):
     calc_ll = options['calc_ll']
     alpha0 = options['alpha']
     mu = options['mu']
+    kappa = options['kappa']
     try:
         nu =  options['nu']
     except KeyError:
@@ -1051,7 +1053,7 @@ def train(training_data, start_parameters, options, VERBOSE=True):
                 if not 0 in tau:
                     alpha = alpha0/(1+(n+offset)/(tau*B))
             parameters.update(delta_params, alpha, mu_t,
-                              nu, ADAM=ADAM, NORMALISE=NORMALISE)
+                              nu, kappa=kappa, ADAM=ADAM, NORMALISE=NORMALISE)
         if D > 0:
             # if D == 0 or < 0, this means NO DIAGNOSTICS ARE RUN
             # the reason this is an option is clearly speed
