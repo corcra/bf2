@@ -84,7 +84,7 @@ class options_dict(dict):
         self['fix_words'] = False
         self['fix_relas'] = False
         self['trans_rela'] = False
-        self['kappa'] = 0.01
+        self['kappa'] = [0, 0, 0]
         # need to input the rest of the defaults
         # (every possible option should be initialised here somehow)
     def pretty_print(self):
@@ -308,7 +308,7 @@ class params(object):
         self.trans_rela = options['trans_rela']
 
     def update(self, grad_parameters, alpha, mu, 
-               nu=None, kappa=0.0, ADAM=True, NORMALISE=False):
+               nu=None, kappa=[0, 0, 0], ADAM=True, NORMALISE=False):
         """
         Updates parameters.
         Note: assumes alpha, mu, nu are pre-updated.
@@ -316,10 +316,10 @@ class params(object):
         # unwrap
         gradC, gradG, gradV = grad_parameters
         # regularise (REGOPT 1)
-        gradG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
-        # REGOPT ALL
-        #gradC[:, :-1] -= kappa*self.C[:, :-1]
-        #gradV[:, :-1] -= kappa*self.V[:, :-1]
+        if sum(kappa) > 0:
+            gradC[:, :-1] -= kappa[0]*self.C[:, :-1]
+            gradG[1:, :-1, :-1] -= kappa[1]*self.G[1:, :-1, :-1]
+            gradV[:, :-1] -= kappa[2]*self.V[:, :-1]
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
@@ -329,6 +329,7 @@ class params(object):
         if not self.fix_relas:
             self.G_vel = muG*self.G_vel + (1-muG)*gradG
             # regularise (REGOPT 2)
+            # old...
             #self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         if ADAM:
             nuC, nuG, nuV = nu
@@ -354,6 +355,7 @@ class params(object):
             # may change the final solution...
             deltaG = self.G_vel/(np.sqrt(self.G_acc) + EPSILON)
             # regularise (REGOPT 3)
+            # ... old
             #deltaG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
             deltaV = self.V_vel/(np.sqrt(self.V_acc) + EPSILON)
         else:
