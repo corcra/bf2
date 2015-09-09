@@ -802,12 +802,12 @@ class params(object):
             print 'WARNING: Save expects an XXX in the filename. Fixed that for you.'
             filename = filename+'_XXX'
         if '.npy' in filename:
-            C_vals = (self.words, self.C[:, :-1])
-            G_vals = (self.relas, self.G)
-            V_vals = (self.words, self.V[:, :-1])
-            np.save(re.sub('XXX','C',filename),C_vals)
-            np.save(re.sub('XXX','G',filename),G_vals)
-            np.save(re.sub('XXX','V',filename),V_vals)
+            C_vals = {'words': self.words, 'vecs': self.C[:, :-1]}
+            G_vals = {'relas': self.relas, 'mats': self.G}
+            V_vals = {'words': self.words, 'vecs': self.V[:, :-1]}
+            np.save(re.sub('XXX','C',filename), C_vals)
+            np.save(re.sub('XXX','G',filename), G_vals)
+            np.save(re.sub('XXX','V',filename), V_vals)
         elif '.txt' in filename:
             fC = open(re.sub('XXX','C',filename), 'w')
             fG = open(re.sub('XXX','G',filename), 'w')
@@ -844,9 +844,16 @@ class params(object):
             filename = filename+'_XXX'
         if '.npy' in filename:
             print 'WARNING: behaviour has changed recently'
-            C_words, C_pruned = np.load(re.sub('XXX','C',filename)).item()
-            G_relas, G = np.load(re.sub('XXX','G',filename)).item()
+            C_dict = np.load(re.sub('XXX','C',filename)).item()
+            C_words = C_dict['words']
+            C_pruned = C_dict['vecs']
+            G_dict = np.load(re.sub('XXX','G',filename)).item()
+            relas = G_dict['relas']
+            G = G_dict['mats']
             V_words, V_pruned = np.load(re.sub('XXX','V',filename)).item()
+            V_dict = np.load(re.sub('XXX','V',filename)).item()
+            V_words = V_dict['words']
+            V_pruned = V_dict['vecs']
             assert C_words == V_words
             words = C_words
             W = len(words)
