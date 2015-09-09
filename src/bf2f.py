@@ -520,6 +520,12 @@ class params(object):
                 GV_len = np.linalg.norm(GV)
                 C_len = np.linalg.norm(self.C, axis=1)
                 energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
+            elif self.etype == 'cosine':
+                CG = np.dot(self.C, self.G[r].T)
+                CG_lens = np.linalg.norm(CG, axis=1)
+                numerator = -np.dot(CG, self.V[t, :])
+                denominator = np.linalg.norm(self.V[t, :])*CG_lens
+                energy = numerator/denominator
             else: sys.exit('ERROR: Not implemented')
         elif switch == 'G':
             # return over all R
@@ -535,6 +541,13 @@ class params(object):
                 GV_len = np.linalg.norm(GV, axis=1)
                 C_len = np.linalg.norm(self.C[s, :])
                 energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
+            elif self.etype == 'cosine':
+                # note this GC is different to before :)
+                GC = np.dot(self.G, self.C[s, :])
+                GC_lens = np.linalg.norm(GC, axis=1)
+                numerator = -np.dot(GC, self.V[t, :])
+                denominator = np.linalg.norm(self.V[t, :])*GC_lens
+                energy = numerator/denominator
             else: sys.exit('ERROR: Not implemented')
         elif switch == 'V':
             #return over all T
@@ -550,6 +563,12 @@ class params(object):
                 GV_len = np.linalg.norm(GV, axis=1)
                 C_len = np.linalg.norm(self.C[s, :])
                 energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
+            elif self.etype == 'cosine':
+                GC = np.dot(self.G[r], self.C[s])
+                V_lens = np.linalg.norm(self.V, axis=1)
+                numerator = -np.dot(self.V, GC)
+                denominator = np.linalg.norm(GC)*V_lens
+                energy = numerator/denomaintor
             else: sys.exit('ERROR: Not implemented')
         else:
             print 'ERROR: Cannot parse switch.'
