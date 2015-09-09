@@ -429,6 +429,28 @@ class params(object):
             print prefactor.shape
             dE_G = prefactor*(GV_len*np.einsum('...i,...j', C_sub, V_sub) - (GVC/GV_len)*(np.einsum('...i,...j', GV, V_sub)))
             dE_V = prefactor*(GV_len*np.einsum('...ij,...i', G_sub, C_sub) - (GVC/GV_len)*(np.einsum('...i,...ij', GV, G_sub)))
+        elif self.etype == 'cosine':
+            # TODO: make efficient, I assume. Everything else has that TODO.
+            GC = np.einsum('...ij,...j', G_sub, C_sub)
+            VGC = np.einsum('...i,...i', V_sub, GC)
+            GC_lens = np.linalg.norm(GC, axis=1)
+            V_lens = np.linalg.norm(V_sub, axis=1)
+            VG = np.einsum('...i,...ij', V_sub, G_sub)
+            GCG = np.einsum('...i,...ij', GC, G_sub)
+            term1_norm = (V_lens*GC_lens)
+            term2_norm = (V_lens*pow(GC_lens, 3))
+            # dE_C
+            dE_C = (-VG/term1_norm.reshape(-1, 1) + 
+                   VGC.reshape(-1, 1)*GCG/term2_norm.reshape(-1, 1))
+            # dE_G
+            VC = np.einsum('...i,...j', V_sub, C_sub)
+            GCC = np.einsum('...i,...j', GC, C_sub)
+            dE_G = (-VC/term1_norm.reshape(-1, 1, 1) +
+                   VGC.reshape(-1, 1, 1)*GCC/term2_norm.reshape(-1, 1, 1))
+            # dE_V
+            term2_norm_V = GC_lens*pow(V_lens, 3)
+            dE_V = (-GC/term1_norm.reshape(-1, 1) +
+                   VGC.reshape(-1, 1)*V_sub/term2_norm_V.reshape(-1, 1))
         else:
             sys.exit('ERROR: Not implemented')
         return dE_C, dE_G, dE_V
@@ -568,7 +590,7 @@ class params(object):
                 V_lens = np.linalg.norm(self.V, axis=1)
                 numerator = -np.dot(self.V, GC)
                 denominator = np.linalg.norm(GC)*V_lens
-                energy = numerator/denomaintor
+                energy = numerator/denominator
             else: sys.exit('ERROR: Not implemented')
         else:
             print 'ERROR: Cannot parse switch.'
@@ -654,6 +676,9 @@ class params(object):
                                                    self.V[triple[2]]) -\
                                             self.C[triple[0]])
         elif self.etype == 'angular':
+            for (i, triple) in enumerate(locations):
+                energy[i] = self.E_triple(triple)
+        elif self.etype == 'cosine':
             for (i, triple) in enumerate(locations):
                 energy[i] = self.E_triple(triple)
         else: sys.exit('ERROR: Not implemented')
