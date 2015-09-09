@@ -560,16 +560,22 @@ class params(object):
         """
         The energy of a SINGLE triple.
         """
+        s, r, t = triple
         if self.etype == 'dot':
-            energy = -np.dot(self.V[triple[2]], np.dot(self.G[triple[1]], self.C[triple[0]]))
+            energy = -np.dot(self.V[t], np.dot(self.G[r], self.C[s]))
         elif self.etype == 'euclidean':
-            energy = -np.linalg.norm(np.dot(self.G[triple[1]], self.V[triple[2]]) - self.C[triple[0]])
+            energy = -np.linalg.norm(np.dot(self.G[r], self.V[t]) - self.C[s])
         elif self.etype == 'angular':
-            GV = np.dot(self.G[triple[1]], self.V[triple[2]])
-            GVC = np.dot(GV, self.C[triple[0]])
+            GV = np.dot(self.G[r], self.V[t])
+            GVC = np.dot(GV, self.C[s])
             GV_len = np.linalg.norm(GV)
-            C_len = np.linalg.norm(self.C[triple[0]])
+            C_len = np.linalg.norm(self.C[s])
             energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
+        elif self.etype == 'cosine':
+            GC = np.dot(self.G[r], self.C[s])
+            GC_norm = np.linalg.norm(GC)
+            V_norm = np.linalg.norm(self.V[t])
+            energy = -np.dot(self.V[t], GC)/(GC_norm*V_norm)
         else: sys.exit('ERROR: Not implemented')
         return energy
 
@@ -752,12 +758,12 @@ class params(object):
             print 'WARNING: Save expects an XXX in the filename. Fixed that for you.'
             filename = filename+'_XXX'
         if '.npy' in filename:
-            C_dict = dict(zip(self.words, self.C[:,:-1]))
-            G_dict = dict(zip(self.relas, self.G))
-            V_dict = dict(zip(self.words, self.V[:, :-1]))
-            np.save(re.sub('XXX','C',filename),C_dict)
-            np.save(re.sub('XXX','G',filename),G_dict)
-            np.save(re.sub('XXX','V',filename),V_dict)
+            C_vals = (self.words, self.C[:, :-1])
+            G_vals = (self.relas, self.G)
+            V_vals = (self.words, self.V[:, :-1])
+            np.save(re.sub('XXX','C',filename),C_vals)
+            np.save(re.sub('XXX','G',filename),G_vals)
+            np.save(re.sub('XXX','V',filename),V_vals)
         elif '.txt' in filename:
             fC = open(re.sub('XXX','C',filename), 'w')
             fG = open(re.sub('XXX','G',filename), 'w')
@@ -793,24 +799,23 @@ class params(object):
             print 'WARNING: Load expects an XXX in the filename. Fixed that for you.'
             filename = filename+'_XXX'
         if '.npy' in filename:
-            C_dict = np.load(re.sub('XXX','C',filename)).item()
-            G_dict = np.load(re.sub('XXX','G',filename)).item()
-            V_dict = np.load(re.sub('XXX','V',filename)).item()
-            assert set(C_dict.keys()) == set(V_dict.keys())
-            words = list(C_dict.keys())
-            relas = list(G_dict.keys())
+            print 'WARNING: behaviour has changed recently'
+            C_words, C_pruned = np.load(re.sub('XXX','C',filename)).item()
+            G_relas, G = np.load(re.sub('XXX','G',filename)).item()
+            V_words, V_pruned = np.load(re.sub('XXX','V',filename)).item()
+            assert C_words == V_words
+            words = C_words
             W = len(words)
             R = len(relas)
-            d = len(C_dict[words[0]])
-            # create empty matrices
+            d = C_pruned.shape[1]
+            assert V_pruned.shape == C_pruned.shape
+            assert G.shape[1] == d+1
+            assert G.shape[0] == R
+            # extend to include the trailing 1
             C = np.ones(shape=(W, d+1))
             V = np.ones(shape=(W, d+1))
-            G = np.empty(shape=(R, d+1, d+1))
-            for (i, word) in enumerate(words):
-                C[i, :-1] = C_dict[word]
-                V[i, :-1] = V_dict[word]
-            for (i, rela) in enumerate(relas):
-                G[i:, :, :] = G_dict[rela]
+            C[:, :-1] = C_pruned
+            V[:, :-1] = V_pruned
         elif '.txt' in filename:
             fC = open(re.sub('XXX','C',filename), 'r')
             fG = open(re.sub('XXX','G',filename), 'r')
