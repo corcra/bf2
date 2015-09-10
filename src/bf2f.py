@@ -868,19 +868,16 @@ class params(object):
             C[:, :-1] = C_pruned
             V[:, :-1] = V_pruned
         elif '.txt' in filename:
+            # try C and V first...
             fC = open(re.sub('XXX','C',filename), 'r')
-            fG = open(re.sub('XXX','G',filename), 'r')
             fV = open(re.sub('XXX','V',filename), 'r')
             C_header = fC.readline()
             V_header = fV.readline()
             assert C_header == V_header
             W, d = map(int, C_header.split())
-            G_header = fG.readline()
-            R, d = map(int, G_header.split())
-            # create empty matrices
+            # create empty
             C = np.ones(shape=(W, d+1))
             V = np.ones(shape=(W, d+1))
-            G = np.zeros(shape=(R, d+1, d+1))
             words = []
             for (i, line) in enumerate(fC):
                 sl = line.split()
@@ -894,14 +891,26 @@ class params(object):
                 vec = np.array(map(np.float, sl[1:]))
                 i = words.index(word)
                 V[i, :-1] = vec[:]
-            relas = []
-            for (i, line) in enumerate(fG):
-                sl = line.split()
-                rela = sl[0]
-                relas.append(rela)
-                matrix = np.array(map(np.float, sl[1:])).reshape(d, d+1)
-                G[i, :-1, :] = matrix[:, :]
-                G[i, -1, -1] = 1
+            # now for G
+            try:
+                fG = open(re.sub('XXX','G',filename), 'r')
+                G_header = fG.readline()
+                R, d = map(int, G_header.split())
+                # create empty matrices
+                G = np.zeros(shape=(R, d+1, d+1))
+                relas = []
+                for (i, line) in enumerate(fG):
+                    sl = line.split()
+                    rela = sl[0]
+                    relas.append(rela)
+                    matrix = np.array(map(np.float, sl[1:])).reshape(d, d+1)
+                    G[i, :-1, :] = matrix[:, :]
+                    G[i, -1, -1] = 1
+            except IOError:
+                print 'WARNING: no G matrices found.'
+                G = np.array([np.eye(d+1)])
+                R = 1
+                relas = ['0']
         self.W = W
         self.R = R
         self.d = d
