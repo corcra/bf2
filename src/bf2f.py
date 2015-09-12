@@ -85,6 +85,7 @@ class options_dict(dict):
         self['fix_relas'] = False
         self['trans_rela'] = False
         self['kappa'] = [0, 0, 0]
+        self['seed'] = 1337
         # need to input the rest of the defaults
         # (every possible option should be initialised here somehow)
     def pretty_print(self):
