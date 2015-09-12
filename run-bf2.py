@@ -9,10 +9,9 @@ import pdb as pdb
 from subprocess import call
 import sys
 
-bf2f.np.random.seed(1337)
 
 # --- load options --- #
-options = bf2f.options()
+options = bf2f.options_dict()
 try:
     options.load(sys.argv[1], verbose=True)
 except IndexError:
@@ -22,6 +21,13 @@ except IndexError:
 output_root = options['output_root']
 training_data_path = options['training_data_path']
 vocab = (options['wordlist'], options['relalist'])
+
+# --- init RNG --- #
+try:
+    seed = options['seed']
+except KeyError:
+    seed = 1337
+bf2f.np.random.seed(seed)
 
 # --- save the options --- #
 options.save(output_root+'_options.txt')
