@@ -53,3 +53,26 @@ lensl<-melt(lens, id="n")
 ggplot(lensl, aes(x=n, y=value, color=variable))+geom_point(cex=1.2, alpha=0.8)+xlab("# training examples seen")+ylab("mean length of sample of vectors/matrices")+ggtitle(fname)
 #ggsave(paste0(fname,"_lens.pdf"))
 ggsave(paste0(fname,"_lens.png"))
+
+# some evaluation metrics, now
+# NOTE: these files may not exist, in which this will fail... but that's ok
+# derp
+# # accuracies
+dev_acc<-read.table(paste0(fname,"_dev_acc.txt"), header=T)
+ggplot(dev_acc, aes(x=epoch, y=accuracy, group=scoretype, colour=scoretype))+geom_point(cex=1.2)+geom_line()+xlab("# epochs")+ylab("accuracy on socher task")+ggtitle(fname)
+ggsave(paste0(fname,"_dev_acc.png"))
+
+# hits at N
+hits_atN<-read.table(paste0(fname,"_hits_at_N.txt"), header=T)
+ggplot(hits_atN, aes(x=epoch, y=mean_hits, group=N, colour=N))+geom_point(cex=1.2)+geom_line()+xlab("# epochs")+ylab("fraction true R is in top N")+ggtitle(fname)
+ggsave(paste0(fname, "_hits_at_N.png"))
+
+# predictive
+predictive<-read.table(paste0(fname,"_predictive.txt"), header=T)
+ggplot(predictive, aes(x=epoch, y=mean_pRAC))+geom_point(cex=1.2)+geom_line()+xlab("# epochs")+ylab("mean p(R|A, C) for true triples")+ggtitle(fname)
+ggsave(paste0(fname, "_predictive.png"))
+
+# AUC
+auc<-read.table(paste0(fname, "_auc.txt"), header=T)
+ggplot(auc, aes(x=epoch, y=auc, group=scoretype, colour=scoretype))+geom_point(cex=1.2)+geom_line()+xlab("# epochs")+ylab("AUROC")+ggtitle(fname)
+ggsave(paste0(fname, "_auc.png"))
