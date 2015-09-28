@@ -1,1 +1,1 @@
-__all__ = ["explore_fns.py", "bf2f.py"]
+__all__ = ["explore_fns.py", "bf2f.py", "socher_task_fns.py"]

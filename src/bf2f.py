@@ -17,28 +17,9 @@ from copy import deepcopy
 from math import pi
 
 # --- CONSTANTS --- #
-THEANO=False
-if THEANO:
-    print 'WARNING: Asking for theano functions, but they are not declared here.'
-    from theano import function, shared, scan
-    import theano.tensor as tten
-    from bf2f_theano_params import *
-# yolo
-#linn = mp.ProcessingPool(5)
-# every time the ENTIRE training dataset is pulled in, shuffle it!
-# (this may help with training with multiple epochs...)
-SHUFFLE=True
-# fancier optimization scheme (http://arxiv.org/pdf/1412.6980.pdf)
-ADAM=True
-if ADAM:
-    EPSILON=1e-8
-    LAMBDA=(1-1e-8)
-# normalise vectors to 1, matrices to have max element = 1 (weird, weird)
-NORMALISE=False
-# energy type
-#ETYPE='euclidean'
-ETYPE='dot'
-#ETYPE='angular'
+# ADAM settings... (http://arxiv.org/pdf/1412.6980.pdf)
+EPSILON=1e-8
+LAMBDA=(1-1e-8)
 # code for unobserved relationship
 MISS_R=9999
 
@@ -53,42 +34,6 @@ def clean_word(word):
     # strip trailing space
     word4 = word3.rstrip(' ')
     return word4
-
-def load_options(options_path):
-    # BRITTLE
-    print 'Reading options from',  options_path
-    options_raw = open(options_path, 'r').readlines()
-    options = dict()
-    for line in options_raw:
-        if '#' in line:
-            # skip 'comments'
-            continue
-        option_name = line.split(' ')[0]
-        option_value = ' '.join(line.split(' ')[1:])
-        # this is gross
-        if '(' in option_value:
-            value = tuple(map(float, re.sub('[\(\)]', '', option_value).split(',')))
-        elif '[' in option_value:
-            value = np.array(map(float, re.sub('[\[\]]', '', option_value).split(',')))
-        elif option_value == 'False\n':
-            value = False
-        elif option_value == 'True\n':
-            value = True
-        else:
-            try:
-                value = int(option_value)
-            except ValueError:
-                # not an int
-                value = option_value.strip()
-        options[option_name] = value
-    # make np arrays
-    options['mu'] = np.array(options['mu'])
-    options['nu'] = np.array(options['nu'])
-    options['alpha'] = np.array(options['alpha'])
-    # optional
-    if 'omega' in options:
-        options['omega'] = np.array(options['omega'])
-    return options
 
 def generate_traindata(droot, W, R):
     # define joint probabilities of all triples
@@ -118,6 +63,112 @@ def generate_traindata(droot, W, R):
     fo.close()
     return True
 
+# --- options object --- #
+class options_dict(dict):
+    """
+    Class for object.
+    """
+    def __init__(self):
+        """ initialise all settings to defaults """
+        # default values
+        self['online'] = True
+        self['exact'] = False
+        self['persistent'] = True
+        self['noise'] = False
+        self['adam'] = True
+        self['normalise'] = False
+        self['etype'] = 'dot'
+        self['calc_ll'] = False
+        self['wordlist'] = None
+        self['relalist'] = None
+        self['fix_words'] = False
+        self['fix_relas'] = False
+        self['trans_rela'] = False
+        self['kappa'] = [0, 0, 0]
+        self['seed'] = 1337
+        # need to input the rest of the defaults
+        # (every possible option should be initialised here somehow)
+    def pretty_print(self):
+        """ print out """
+        for (name, value) in self.iteritems():
+            print value, '\t:', name
+
+    def load(self, path, verbose=False):
+        # BRITTLE
+        print 'Reading options from',  path
+        options_raw = open(path, 'r').readlines()
+        options = dict()
+        for line in options_raw:
+            if '#' in line:
+                # skip 'comments'
+                continue
+            option_name = line.split(' ')[0]
+            option_value = ' '.join(line.split(' ')[1:])
+            # this is gross
+            if '(' in option_value:
+                value = tuple(map(float, re.sub('[\(\)]', '', option_value).split(',')))
+            elif '[' in option_value:
+                value = np.array(map(float, re.sub('[\[\]]', '', option_value).split(',')))
+            elif option_value == 'False\n':
+                value = False
+            elif option_value == 'True\n':
+                value = True
+            else:
+                try:
+                    value = int(option_value)
+                except ValueError:
+                    # not an int
+                    value = option_value.strip()
+            self[option_name] = value
+        # make np arrays
+        self['mu'] = np.array(self['mu'])
+        self['nu'] = np.array(self['nu'])
+        self['alpha'] = np.array(self['alpha'])
+        # optional
+        if 'omega' in self:
+            self['omega'] = np.array(self['omega'])
+        self.check(verbose)
+        if verbose:
+            self.pretty_print()
+
+    def save(self, path, verbose=False):
+        """ save to a file """
+        fo = open(path, 'w')
+        for (option_name, value) in self.iteritems():
+            if type(value) == np.ndarray:
+                value = tuple(value)
+            fo.write(option_name+' '+str(value)+'\n')
+        fo.close()
+        if verbose:
+            print 'Options saved to', path
+
+    def check(self, verbose=False):
+        """ sanity check """
+        # hard constraints
+        if not 'training_data_path' in self:
+            sys.exit('ERROR: missing training_data_path')
+        if 'batch' in self['output_root']:
+            assert not self['online']
+        if 'inexact' in self['output_root']:
+            assert not self['exact']
+        if 'nonpersistent' in self['output_root']:
+            assert not self['persistent']
+        if 'noise' in self['output_root']:
+            assert self['noise']
+        if 'ADAM' in self['output_root']:
+            assert self['adam']
+        if 'SGD' in self['output_root']:
+            assert not self['adam']
+        # soft warnings
+        if self['wordlist'] is None:
+            print 'WARNING: wordlist doesn\'t exist.'
+        if self['relalist'] is None:
+            print 'WARNING: relalist doesn\'t exist.'
+        if self['diagnostics_rate'] <= 0:
+            print 'WARNING: no diagnostics.'
+        if verbose:
+            print 'Options passed all checks.'
+    
 # --- data stream --- #
 class data_stream(object):
     """
@@ -158,9 +209,11 @@ class data_stream(object):
         else:
             sys.exit('ERROR: data file incorrectly formatted.')
         return W, R
-    def acquire_all(self):
+    def acquire_all(self, SHUFFLE=True):
         """
         Just suck it all in!
+        By default, we shuffle the training data.
+        (this may help with multiple epochs)
         """
         traindata = [[0, 0, 0]]
         if '.gz' in self.path:
@@ -182,8 +235,10 @@ class params(object):
     Parameter object.
     Contains C, G, V and velocities for all.
     """
-    def __init__(self, initial_parameters, vocab=None,
-                 fix_words=False, fix_relas=False, trans_rela=False):
+    def __init__(self, initial_parameters, options=None, vocab=None):
+        if options is None:
+            options = options_dict()
+        self.etype = options['etype']
         if type(initial_parameters) == str:
             # assume a PATH has been given
             params_path = initial_parameters
@@ -201,17 +256,43 @@ class params(object):
             self.R = G.shape[0]
             self.d = C.shape[1] - 1
             # vocab
-            try:
+            if type(vocab) == tuple:
+                # assume a tuple of PATHs has been given
+                if not vocab[0] is None:
+                    # words first
+                    wordlist_path = vocab[0]
+                    words_raw = open(wordlist_path, 'r').readlines()
+                    words = ['']*len(words_raw)
+                    for line in words_raw:
+                        index = int(line.split()[0])
+                        word = line.split()[1]
+                        words[index] = word
+                else:
+                    words = map(str, range(self.W))
+                if not vocab[1] is None:
+                    # relas first
+                    relalist_path = vocab[1]
+                    relas_raw = open(relalist_path, 'r').readlines()
+                    relas = ['']*len(relas_raw)
+                    for line in relas_raw:
+                        index = int(line.split()[0])
+                        rela = line.split()[1]
+                        relas[index] = rela
+                else:
+                    relas = map(str, range(self.R))
+                # assign
+                self.words = words
+                self.relas = relas
+            elif type(vocab) == dict:
                 self.words = vocab['words']
                 self.relas = vocab['relas']
-            except TypeError:
-                # no vocab
-                self.words = map(str, range(self.W))
-                self.relas = map(str, range(self.R))
+            else:
+                sys.exit('ERROR: vocab is of unexpected type. Aborting.')
             # weights
             self.C = deepcopy(C)
             self.G = deepcopy(G)
             self.V = deepcopy(V)
+        # these things are set regardless of status of initial parameters
         # velocities (this is m_t in Adam paper)
         self.C_vel = np.zeros(shape=self.C.shape)
         self.G_vel = np.zeros(shape=self.G.shape)
@@ -222,18 +303,24 @@ class params(object):
         self.V_acc = np.zeros(shape=self.V.shape)
         # fix some parameters?
         # (never update these)
-        self.fix_words = fix_words
-        self.fix_relas = fix_relas
+        self.fix_words = options['fix_words']
+        self.fix_relas = options['fix_relas']
         # special type of relationship (translations only)
-        self.trans_rela = trans_rela
+        self.trans_rela = options['trans_rela']
 
-    def update(self, grad_parameters, alpha, mu, nu=None):
+    def update(self, grad_parameters, alpha, mu, 
+               nu=None, kappa=[0, 0, 0], ADAM=True, NORMALISE=False):
         """
         Updates parameters.
         Note: assumes alpha, mu, nu are pre-updated.
         """
         # unwrap
         gradC, gradG, gradV = grad_parameters
+        # regularise (REGOPT 1)
+        if sum(kappa) > 0:
+            gradC[:, :-1] -= kappa[0]*self.C[:, :-1]
+            gradG[1:, :-1, :-1] -= kappa[1]*self.G[1:, :-1, :-1]
+            gradV[:, :-1] -= kappa[2]*self.V[:, :-1]
         alphaC, alphaG, alphaV = alpha
         muC, muG, muV = mu
         # update velocities
@@ -242,6 +329,9 @@ class params(object):
             self.V_vel = muV*self.V_vel + (1-muV)*gradV
         if not self.fix_relas:
             self.G_vel = muG*self.G_vel + (1-muG)*gradG
+            # regularise (REGOPT 2)
+            # old...
+            #self.G_vel[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
         if ADAM:
             nuC, nuG, nuV = nu
             # accels (elementwise squaring)
@@ -265,6 +355,9 @@ class params(object):
             # the other option is to put it in the 'true' gradient, but this
             # may change the final solution...
             deltaG = self.G_vel/(np.sqrt(self.G_acc) + EPSILON)
+            # regularise (REGOPT 3)
+            # ... old
+            #deltaG[1:, :-1, :-1] -= kappa*self.G[1:, :-1, :-1]
             deltaV = self.V_vel/(np.sqrt(self.V_acc) + EPSILON)
         else:
             deltaC = self.C_vel
@@ -284,7 +377,7 @@ class params(object):
             else:
                 self.G += alphaG_hat*deltaG
         if NORMALISE:
-            # hax
+            # normalise vectors to 1, matrices to have max element = 1 (weird, weird)
             # the vectors are simple
             self.C[:, :-1] /= np.linalg.norm(self.C[:, :-1]).reshape(-1,1)
             self.V[:, :-1] /= np.linalg.norm(self.V[:, :-1]).reshape(-1,1)
@@ -301,12 +394,12 @@ class params(object):
         C_sub = self.C[locations[:, 0]]
         G_sub = self.G[locations[:, 1]]
         V_sub = self.V[locations[:, 2]]
-        if ETYPE == 'dot':
+        if self.etype == 'dot':
             # TODO: make this efficient
             dE_C = -np.einsum('...i,...ij', V_sub, G_sub)
             dE_G = -np.einsum('...i,...j', V_sub, C_sub)
             dE_V = -np.einsum('...ij,...j', G_sub, C_sub)
-        elif ETYPE == 'euclidean':
+        elif self.etype == 'euclidean':
             # TODO: make efficient, probably
             # NOTE: applying G to V, not C
             GV_C = np.einsum('...ij,...j', G_sub, V_sub) - C_sub
@@ -315,7 +408,7 @@ class params(object):
             dE_C = 1*GV_C/lens
             dE_G = -np.einsum('...i,...j', GV_Cl, V_sub)
             dE_V = -np.einsum('...i,...ij', GV_Cl, G_sub)
-        elif ETYPE =='angular':
+        elif self.etype =='angular':
             # TODO: make efficient, probably
             # also test
             # NOTE: applying G to V, not C
@@ -337,6 +430,28 @@ class params(object):
             print prefactor.shape
             dE_G = prefactor*(GV_len*np.einsum('...i,...j', C_sub, V_sub) - (GVC/GV_len)*(np.einsum('...i,...j', GV, V_sub)))
             dE_V = prefactor*(GV_len*np.einsum('...ij,...i', G_sub, C_sub) - (GVC/GV_len)*(np.einsum('...i,...ij', GV, G_sub)))
+        elif self.etype == 'cosine':
+            # TODO: make efficient, I assume. Everything else has that TODO.
+            GC = np.einsum('...ij,...j', G_sub, C_sub)
+            VGC = np.einsum('...i,...i', V_sub, GC)
+            GC_lens = np.linalg.norm(GC, axis=1)
+            V_lens = np.linalg.norm(V_sub, axis=1)
+            VG = np.einsum('...i,...ij', V_sub, G_sub)
+            GCG = np.einsum('...i,...ij', GC, G_sub)
+            term1_norm = (V_lens*GC_lens)
+            term2_norm = (V_lens*pow(GC_lens, 3))
+            # dE_C
+            dE_C = (-VG/term1_norm.reshape(-1, 1) + 
+                   VGC.reshape(-1, 1)*GCG/term2_norm.reshape(-1, 1))
+            # dE_G
+            VC = np.einsum('...i,...j', V_sub, C_sub)
+            GCC = np.einsum('...i,...j', GC, C_sub)
+            dE_G = (-VC/term1_norm.reshape(-1, 1, 1) +
+                   VGC.reshape(-1, 1, 1)*GCC/term2_norm.reshape(-1, 1, 1))
+            # dE_V
+            term2_norm_V = GC_lens*pow(V_lens, 3)
+            dE_V = (-GC/term1_norm.reshape(-1, 1) +
+                   VGC.reshape(-1, 1)*V_sub/term2_norm_V.reshape(-1, 1))
         else:
             sys.exit('ERROR: Not implemented')
         return dE_C, dE_G, dE_V
@@ -416,48 +531,67 @@ class params(object):
             #GC = np.dot(self.C, self.G[r].T)
             #energy = -np.dot(GC, self.V[t])
             # note: above version is significantly slower than the below
-            if ETYPE == 'dot':
+            if self.etype == 'dot':
                 VG = np.dot(self.V[t], self.G[r])
                 energy = -np.dot(self.C, VG)
-            elif ETYPE == 'euclidean':
+            elif self.etype == 'euclidean':
                 GV = np.dot(self.G[r, :, :], self.V[t, :])
                 energy = -np.linalg.norm(GV - self.C, axis=1)
-            elif ETYPE == 'angular':
+            elif self.etype == 'angular':
                 GV = np.dot(self.G[r, :, :], self.V[t, :])
                 GVC = np.einsum('...j,...ij', GV, self.C)
                 GV_len = np.linalg.norm(GV)
                 C_len = np.linalg.norm(self.C, axis=1)
                 energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
+            elif self.etype == 'cosine':
+                CG = np.dot(self.C, self.G[r].T)
+                CG_lens = np.linalg.norm(CG, axis=1)
+                numerator = -np.dot(CG, self.V[t, :])
+                denominator = np.linalg.norm(self.V[t, :])*CG_lens
+                energy = numerator/denominator
             else: sys.exit('ERROR: Not implemented')
         elif switch == 'G':
             # return over all R
-            if ETYPE == 'dot':
+            if self.etype == 'dot':
                 VG = np.dot(self.V[t], self.G)
                 energy = -np.dot(VG, self.C[s])
-            elif ETYPE == 'euclidean':
+            elif self.etype == 'euclidean':
                 GV = np.dot(self.G[:, :, :], self.V[t, :])
                 energy = -np.linalg.norm(GV - self.C[s, :], axis=1)
-            elif ETYPE == 'angular':
+            elif self.etype == 'angular':
                 GV = np.dot(self.G[:, :, :], self.V[t, :])
                 GVC = np.einsum('...ij,...j', GV, self.C[s, :])
                 GV_len = np.linalg.norm(GV, axis=1)
                 C_len = np.linalg.norm(self.C[s, :])
                 energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
+            elif self.etype == 'cosine':
+                # note this GC is different to before :)
+                GC = np.dot(self.G, self.C[s, :])
+                GC_lens = np.linalg.norm(GC, axis=1)
+                numerator = -np.dot(GC, self.V[t, :])
+                denominator = np.linalg.norm(self.V[t, :])*GC_lens
+                energy = numerator/denominator
             else: sys.exit('ERROR: Not implemented')
         elif switch == 'V':
             #return over all T
-            if ETYPE == 'dot':
+            if self.etype == 'dot':
                 GC = np.dot(self.G[r], self.C[s])
                 energy = -np.dot(self.V, GC)
-            elif ETYPE == 'euclidean':
+            elif self.etype == 'euclidean':
                 GV = np.einsum('...jk,...ik', self.G[r, :, :], self.V)
                 energy = -np.linalg.norm(GV - self.C[s, :], axis=1)
-            elif ETYPE == 'angular':
+            elif self.etype == 'angular':
                 GV = np.einsum('...jk,...ik', self.G[r,:, :], self.V)
                 GVC = np.dot(GV, self.C[s, :])
                 GV_len = np.linalg.norm(GV, axis=1)
                 C_len = np.linalg.norm(self.C[s, :])
                 energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
+            elif self.etype == 'cosine':
+                GC = np.dot(self.G[r], self.C[s])
+                V_lens = np.linalg.norm(self.V, axis=1)
+                numerator = -np.dot(self.V, GC)
+                denominator = np.linalg.norm(GC)*V_lens
+                energy = numerator/denominator
             else: sys.exit('ERROR: Not implemented')
         else:
             print 'ERROR: Cannot parse switch.'
@@ -468,16 +602,22 @@ class params(object):
         """
         The energy of a SINGLE triple.
         """
-        if ETYPE == 'dot':
-            energy = -np.dot(self.V[triple[2]], np.dot(self.G[triple[1]], self.C[triple[0]]))
-        elif ETYPE == 'euclidean':
-            energy = -np.linalg.norm(np.dot(self.G[triple[1]], self.V[triple[2]]) - self.C[triple[0]])
-        elif ETYPE == 'angular':
-            GV = np.dot(self.G[triple[1]], self.V[triple[2]])
-            GVC = np.dot(GV, self.C[triple[0]])
+        s, r, t = triple
+        if self.etype == 'dot':
+            energy = -np.dot(self.V[t], np.dot(self.G[r], self.C[s]))
+        elif self.etype == 'euclidean':
+            energy = -np.linalg.norm(np.dot(self.G[r], self.V[t]) - self.C[s])
+        elif self.etype == 'angular':
+            GV = np.dot(self.G[r], self.V[t])
+            GVC = np.dot(GV, self.C[s])
             GV_len = np.linalg.norm(GV)
-            C_len = np.linalg.norm(self.C[triple[0]])
+            C_len = np.linalg.norm(self.C[s])
             energy = 1 - (1/pi)*np.arccos(GVC/(GV_len*C_len))
+        elif self.etype == 'cosine':
+            GC = np.dot(self.G[r], self.C[s])
+            GC_norm = np.linalg.norm(GC)
+            V_norm = np.linalg.norm(self.V[t])
+            energy = -np.dot(self.V[t], GC)/(GC_norm*V_norm)
         else: sys.exit('ERROR: Not implemented')
         return energy
 
@@ -511,8 +651,6 @@ class params(object):
         #energy = np.array(map(lambda (s, r, t): -np.dot(self.C[s], np.dot(self.V[t], self.G[r])), locations))
         # V5
         #energy = map(lambda i: -np.dot(V_sub[i], np.dot(G_sub[i], C_sub[i])), xrange(len(locations)))
-        # V6
-        #energy = linn.amap(self.E_triple, locations)
         # V7
         #parmz = []
         #for triple in locations:
@@ -528,17 +666,20 @@ class params(object):
             R = self.R
             locations = np.array([[s, r, t] for s in xrange(W) for r in xrange(R) for t in xrange(W) ])
         energy = np.empty(shape=len(locations), dtype=np.float)
-        if ETYPE == 'dot':
+        if self.etype == 'dot':
             for (i, triple) in enumerate(locations):
                 energy[i] = -np.dot(self.C[triple[0]], 
                                     np.dot(self.V[triple[2]], 
                                            self.G[triple[1]]))
-        elif ETYPE == 'euclidean':
+        elif self.etype == 'euclidean':
             for (i, triple) in enumerate(locations):
                 energy[i] = -np.linalg.norm(np.dot(self.G[triple[1]], 
                                                    self.V[triple[2]]) -\
                                             self.C[triple[0]])
-        elif ETYPE == 'angular':
+        elif self.etype == 'angular':
+            for (i, triple) in enumerate(locations):
+                energy[i] = self.E_triple(triple)
+        elif self.etype == 'cosine':
             for (i, triple) in enumerate(locations):
                 energy[i] = self.E_triple(triple)
         else: sys.exit('ERROR: Not implemented')
@@ -547,6 +688,26 @@ class params(object):
         #for triple in locations:
         #    energy.append(-np.dot(self.C[triple[0]], np.dot(self.V[triple[2]], self.G[triple[1]])))
         return energy
+
+    def marginal(self, switch):
+        """
+        Calculates marginal distribution of a single type of var: S, R, T.
+        WARNING: may be *extremely* slow/memory intensive for big data.
+            (calculates partition function)
+        """
+        W = self.W
+        R = self.R
+        energies = self.E().reshape(W, R, W)
+        expmE = np.exp(-energies)
+        Z = np.sum(expmE)
+        if switch == 'C':
+            marginal_numerator = np.sum(expmE, axis=(1,2))
+        elif switch == 'G':
+            marginal_numerator = np.sum(expmE, axis=(0,2))
+        elif switch == 'V':
+            marginal_numerator = np.sum(expmE, axis=(0,1))
+        marginal_distribution = marginal_numerator/Z
+        return marginal_distribution 
 
     def sample(self, seed, K):
         """
@@ -642,12 +803,12 @@ class params(object):
             print 'WARNING: Save expects an XXX in the filename. Fixed that for you.'
             filename = filename+'_XXX'
         if '.npy' in filename:
-            C_dict = dict(zip(self.words, self.C[:,:-1]))
-            G_dict = dict(zip(self.relas, self.G))
-            V_dict = dict(zip(self.words, self.V[:, :-1]))
-            np.save(re.sub('XXX','C',filename),C_dict)
-            np.save(re.sub('XXX','G',filename),G_dict)
-            np.save(re.sub('XXX','V',filename),V_dict)
+            C_vals = {'words': self.words, 'vecs': self.C[:, :-1]}
+            G_vals = {'relas': self.relas, 'mats': self.G}
+            V_vals = {'words': self.words, 'vecs': self.V[:, :-1]}
+            np.save(re.sub('XXX','C',filename), C_vals)
+            np.save(re.sub('XXX','G',filename), G_vals)
+            np.save(re.sub('XXX','V',filename), V_vals)
         elif '.txt' in filename:
             fC = open(re.sub('XXX','C',filename), 'w')
             fG = open(re.sub('XXX','G',filename), 'w')
@@ -683,38 +844,41 @@ class params(object):
             print 'WARNING: Load expects an XXX in the filename. Fixed that for you.'
             filename = filename+'_XXX'
         if '.npy' in filename:
+            print 'WARNING: behaviour has changed recently'
             C_dict = np.load(re.sub('XXX','C',filename)).item()
+            C_words = C_dict['words']
+            C_pruned = C_dict['vecs']
             G_dict = np.load(re.sub('XXX','G',filename)).item()
+            relas = G_dict['relas']
+            G = G_dict['mats']
+            V_words, V_pruned = np.load(re.sub('XXX','V',filename)).item()
             V_dict = np.load(re.sub('XXX','V',filename)).item()
-            assert set(C_dict.keys()) == set(V_dict.keys())
-            words = list(C_dict.keys())
-            relas = list(G_dict.keys())
+            V_words = V_dict['words']
+            V_pruned = V_dict['vecs']
+            assert C_words == V_words
+            words = C_words
             W = len(words)
             R = len(relas)
-            d = len(C_dict[words[0]])
-            # create empty matrices
+            d = C_pruned.shape[1]
+            assert V_pruned.shape == C_pruned.shape
+            assert G.shape[1] == d+1
+            assert G.shape[0] == R
+            # extend to include the trailing 1
             C = np.ones(shape=(W, d+1))
             V = np.ones(shape=(W, d+1))
-            G = np.empty(shape=(R, d+1, d+1))
-            for (i, word) in enumerate(words):
-                C[i, :-1] = C_dict[word]
-                V[i, :-1] = V_dict[word]
-            for (i, rela) in enumerate(relas):
-                G[i:, :, :] = G_dict[rela]
+            C[:, :-1] = C_pruned
+            V[:, :-1] = V_pruned
         elif '.txt' in filename:
+            # try C and V first...
             fC = open(re.sub('XXX','C',filename), 'r')
-            fG = open(re.sub('XXX','G',filename), 'r')
             fV = open(re.sub('XXX','V',filename), 'r')
             C_header = fC.readline()
             V_header = fV.readline()
             assert C_header == V_header
             W, d = map(int, C_header.split())
-            G_header = fG.readline()
-            R, d = map(int, G_header.split())
-            # create empty matrices
+            # create empty
             C = np.ones(shape=(W, d+1))
             V = np.ones(shape=(W, d+1))
-            G = np.zeros(shape=(R, d+1, d+1))
             words = []
             for (i, line) in enumerate(fC):
                 sl = line.split()
@@ -728,14 +892,26 @@ class params(object):
                 vec = np.array(map(np.float, sl[1:]))
                 i = words.index(word)
                 V[i, :-1] = vec[:]
-            relas = []
-            for (i, line) in enumerate(fG):
-                sl = line.split()
-                rela = sl[0]
-                relas.append(rela)
-                matrix = np.array(map(np.float, sl[1:])).reshape(d, d+1)
-                G[i, :-1, :] = matrix[:, :]
-                G[i, -1, -1] = 1
+            # now for G
+            try:
+                fG = open(re.sub('XXX','G',filename), 'r')
+                G_header = fG.readline()
+                R, d = map(int, G_header.split())
+                # create empty matrices
+                G = np.zeros(shape=(R, d+1, d+1))
+                relas = []
+                for (i, line) in enumerate(fG):
+                    sl = line.split()
+                    rela = sl[0]
+                    relas.append(rela)
+                    matrix = np.array(map(np.float, sl[1:])).reshape(d, d+1)
+                    G[i, :-1, :] = matrix[:, :]
+                    G[i, -1, -1] = 1
+            except IOError:
+                print 'WARNING: no G matrices found.'
+                G = np.array([np.eye(d+1)])
+                R = 1
+                relas = ['0']
         self.W = W
         self.R = R
         self.d = d
@@ -798,8 +974,6 @@ def Z_gradient(parameters):
     dV_partition /= Z
     return dC_partition, dG_partition, dV_partition
 
-
-
 def combine_gradients(delta_data, delta_model, prefactor):
     """
     Just combines two triples...
@@ -825,8 +999,7 @@ def permute_batch(word_perm, rela_perm, batch):
         mapped_batch[i] = (word_perm[s], rela_perm[r], word_perm[t])
     return mapped_batch
 
-def train(training_data, start_parameters, options,
-          EXACT=False, PERSISTENT=True, NOISE=False, VERBOSE=True):
+def train(training_data, start_parameters, options, VERBOSE=True):
     """
     Perform (stochastic) gradient ascent on the parameters.
     INPUTS:
@@ -837,17 +1010,23 @@ def train(training_data, start_parameters, options,
         parameters      triple of (C, G, V)
         [[ some measure of convergence ]]
     """
+    # unwrap options
+    EXACT = options['exact']
+    PERSISTENT = options['persistent']
+    NOISE = options['noise']
+    ADAM = options['adam']
+    NORMALISE = options['normalise']
     if NOISE: EXACT=False
     if EXACT or NOISE: PERSISTENT=False
-    # unwrap options
     B = options['batch_size']
     S = options['sampling_rate']
     M = options['num_samples']
     D = options['diagnostics_rate']
     K = options['gibbs_iterations']
-    calculate_ll = options['calculate_ll']
+    calc_ll = options['calc_ll']
     alpha0 = options['alpha']
     mu = options['mu']
+    kappa = options['kappa']
     try:
         nu =  options['nu']
     except KeyError:
@@ -865,6 +1044,7 @@ def train(training_data, start_parameters, options,
         vali_set_size = 1000
     # initialise
     vali_set = set()
+    vali_set_done = False
     batch = np.empty(shape=(B, 3),dtype=np.int)
     # TODO: proper sample initialisation
     samples = np.zeros(shape=(M, 3),dtype=np.int)
@@ -893,15 +1073,12 @@ def train(training_data, start_parameters, options,
     for example in training_data:
         if len(vali_set) < vali_set_size and not example[1] == MISS_R:
             vali_set.add(tuple(example))
-            continue
-        if len(vali_set) == vali_set_size:
+        if len(vali_set) == vali_set_size and not vali_set_done:
             perm_vali_batch = permute_batch(W_perm, R_perm, np.array(list(vali_set)))
-        # explanation for this:
-        # in W=5 dataset, if you exclude vali_set, you lose a significant %
-        # of the training data...
-        if not W == 5:
-            if tuple(example) in vali_set:
-                continue
+            vali_set_done = True
+        # do not train on validation set
+        if tuple(example) in vali_set:
+            continue
         batch[n%B, :] = example
         #yolo
         #sampled_counts[example[0]] +=1
@@ -943,25 +1120,35 @@ def train(training_data, start_parameters, options,
             else:
                 if not 0 in tau:
                     alpha = alpha0/(1+(n+offset)/(tau*B))
-            parameters.update(delta_params, alpha, mu_t, nu)
+            parameters.update(delta_params, alpha, mu_t,
+                              nu, kappa=kappa, ADAM=ADAM, NORMALISE=NORMALISE)
         if D > 0:
             # if D == 0 or < 0, this means NO DIAGNOSTICS ARE RUN
             # the reason this is an option is clearly speed
             if n%D == 0 and n > B and n > S:
                 t = time.time() - t0
-                if calculate_ll:
+                if calc_ll:
                     ll = log_likelihood(parameters, training_data)
                     #ll = log_likelihood(parameters, vali_set)
                 else:
                     ll = 'NA'
-                data_energy = np.mean(parameters.E(visible_batch))
-                vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
+                if len(visible_batch) > 0:
+                    data_energy = np.mean(parameters.E(visible_batch))
+                else:
+                    data_energy = 'NA'
+                if len(vali_set) > 0:
+                    vali_energy = np.mean(parameters.E(np.array(list(vali_set))))
+                else:
+                    vali_energy = 'NA'
                 random_lox = np.array(zip(np.random.randint(0, W, 100),
                                           np.random.randint(0, R, 100),
                                           np.random.randint(0, W, 100)))
                 rand_energy = np.mean(parameters.E(random_lox))
                 # so this is different to the rand, cause it's a permuted version of the validation set
-                perm_energy = np.mean(parameters.E(perm_vali_batch))
+                if vali_set_done:
+                    perm_energy = np.mean(parameters.E(perm_vali_batch))
+                else:
+                    perm_energy = 'NA'
                 if PERSISTENT:
                     model_energy = np.mean(parameters.E(samples))
                 else:
