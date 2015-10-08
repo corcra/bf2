@@ -484,7 +484,7 @@ class params(object):
         dE_C_virtual_batch, dE_G_virtual_batch, dE_V_virtual_batch = self.grad_E(virtual_batch)
         # iterate through, calculating weighting factors (conditional probability of R)
         for (i, (s, _, t)) in enumerate(batch):
-            energy = self.E_axis((s, _, t), 'G')
+            energy = self.E_axis((s, _, t), 'R')
             expmE = np.exp(-energy)
             # omega is an additional weighting here - note, this definitely
             # messes up the probabilistic interpretation of this step
@@ -526,7 +526,7 @@ class params(object):
         Returns energies over an axis (S, R, T) given two of the triple.
         """
         s, r, t = triple
-        if switch == 'C':
+        if switch == 'S':
             # return over all S
             #GC = np.dot(self.C, self.G[r].T)
             #energy = -np.dot(GC, self.V[t])
@@ -550,7 +550,7 @@ class params(object):
                 denominator = np.linalg.norm(self.V[t, :])*CG_lens
                 energy = numerator/denominator
             else: sys.exit('ERROR: Not implemented')
-        elif switch == 'G':
+        elif switch == 'R':
             # return over all R
             if self.etype == 'dot':
                 VG = np.dot(self.V[t], self.G)
@@ -572,7 +572,7 @@ class params(object):
                 denominator = np.linalg.norm(self.V[t, :])*GC_lens
                 energy = numerator/denominator
             else: sys.exit('ERROR: Not implemented')
-        elif switch == 'V':
+        elif switch == 'T':
             #return over all T
             if self.etype == 'dot':
                 GC = np.dot(self.G[r], self.C[s])
@@ -700,11 +700,11 @@ class params(object):
         energies = self.E().reshape(W, R, W)
         expmE = np.exp(-energies)
         Z = np.sum(expmE)
-        if switch == 'C':
+        if switch == 'S':
             marginal_numerator = np.sum(expmE, axis=(1,2))
-        elif switch == 'G':
+        elif switch == 'R':
             marginal_numerator = np.sum(expmE, axis=(0,2))
-        elif switch == 'V':
+        elif switch == 'T':
             marginal_numerator = np.sum(expmE, axis=(0,1))
         marginal_distribution = marginal_numerator/Z
         return marginal_distribution 
@@ -721,13 +721,13 @@ class params(object):
             order = np.random.permutation(3)
             for triple_drop in order:
                 if triple_drop == 0:
-                    energy = self.E_axis(ss, 'C')
+                    energy = self.E_axis(ss, 'S')
                     #locs = np.array([ [i, ss[1], ss[2]] for i in xrange(W) ])
                 if triple_drop == 1:
-                    energy = self.E_axis(ss, 'G')
+                    energy = self.E_axis(ss, 'R')
                     #locs = np.array([ [ss[0], i, ss[2]] for i in xrange(R) ])
                 if triple_drop == 2:
-                    energy = self.E_axis(ss, 'V')
+                    energy = self.E_axis(ss, 'T')
                     #locs = np.array([ [ss[0], ss[1], i] for i in xrange(W) ])
                 #expmE = np.exp(-self.E(locs))
                 expmE = np.exp(-energy)
@@ -775,7 +775,7 @@ class params(object):
                 print 'ERROR:', t, 'is not in vocabulary.'
                 return False
         # now do sampling
-        energy = self.E_axis((si, ri, ti), ['C', 'G', 'V'][triple_drop])
+        energy = self.E_axis((si, ri, ti), ['S', 'R', 'T'][triple_drop])
         expmE = np.exp(-energy)
         probs = expmE/np.sum(expmE)
         samples = np.random.choice(len(probs), p=probs, size=n_samples)
