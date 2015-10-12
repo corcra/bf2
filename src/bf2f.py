@@ -35,15 +35,16 @@ def clean_word(word):
     word4 = word3.rstrip(' ')
     return word4
 
-def generate_traindata(droot, W, R):
+def generate_traindata(droot, W, R, N=None):
     # define joint probabilities of all triples
     # not sure why i'm using a beta distribution but w/e
     probs = np.random.beta(a=0.5, b=0.5, size=(W, R, W))
     Z = np.sum(probs)
     probs /= Z
-    np.save(droot+'/w'+str(W)+'r'+str(R)+'_probs.npy', probs)
-    # how many training examples?
-    N = 50*W*R
+    if N is None:
+        # how many training examples?
+        N = 50*W*R
+    np.save(droot+'/W'+str(W)+'_R'+str(R)+'_N'+str(N)+'_probs.npy', probs)
     print 'Generating', N, 'training examples with', W, 'words and', R, 'relas.'
     locs = [(0,0,0)]*(W*R*W)
     loc_probs = [0]*(W*R*W)
@@ -54,7 +55,7 @@ def generate_traindata(droot, W, R):
                 locs[i] = (s, r, t)
                 loc_probs[i] = probs[s, r, t]
                 i += 1
-    fo = gzip.open(droot+'/w'+str(W)+'r'+str(R)+'_train.txt.gz','wb')
+    fo = gzip.open(droot+'/W'+str(W)+'_R'+str(R)+'_N'+str(N)+'_train.txt.gz','wb')
     fo.write(str(W)+' '+str(R)+'\n')
     triples = np.random.choice(len(locs), p=loc_probs, size=N, replace=True)
     for n in xrange(N):
@@ -263,9 +264,14 @@ class params(object):
                     wordlist_path = vocab[0]
                     words_raw = open(wordlist_path, 'r').readlines()
                     words = ['']*len(words_raw)
+                    if '.tsv' in wordlist_path:
+                        split_on = '\t'
+                    else:
+                        split_on = ' '
                     for line in words_raw:
-                        index = int(line.split()[0])
-                        word = line.split()[1]
+                        sl = line.strip('\n').split(split_on)
+                        index = int(sl[0])
+                        word = sl[1]
                         words[index] = word
                 else:
                     words = map(str, range(self.W))
@@ -274,9 +280,14 @@ class params(object):
                     relalist_path = vocab[1]
                     relas_raw = open(relalist_path, 'r').readlines()
                     relas = ['']*len(relas_raw)
+                    if '.tsv' in relalist_path:
+                        split_on = '\t'
+                    else:
+                        split_on = ' '
                     for line in relas_raw:
-                        index = int(line.split()[0])
-                        rela = line.split()[1]
+                        sl = line.strip('\n').split(split_on)
+                        index = int(sl[0])
+                        rela = sl[1]
                         relas[index] = rela
                 else:
                     relas = map(str, range(self.R))
