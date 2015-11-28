@@ -416,7 +416,7 @@ class params(object):
             GV_C = np.einsum('...ij,...j', G_sub, V_sub) - C_sub
             lens = np.linalg.norm(GV_C, axis=1).reshape(-1, 1)
             GV_Cl = GV_C/lens
-            dE_C = 1*GV_C/lens
+            dE_C = 1.0*GV_C/lens
             dE_G = -np.einsum('...i,...j', GV_Cl, V_sub)
             dE_V = -np.einsum('...i,...ij', GV_Cl, G_sub)
         elif self.etype =='angular':
@@ -436,8 +436,8 @@ class params(object):
             print 'csubshape'
             print C_sub.shape
             print C_len.shape
-            dE_C = 1/(GV_len*C_len*C_len)*(C_len*GV - GVC*(C_sub/C_len))
-            prefactor = 1/(GV_len*GV_len*C_len)
+            dE_C = 1.0/(GV_len*C_len*C_len)*(C_len*GV - GVC*(C_sub/C_len))
+            prefactor = 1.0/(GV_len*GV_len*C_len)
             print prefactor.shape
             dE_G = prefactor*(GV_len*np.einsum('...i,...j', C_sub, V_sub) - (GVC/GV_len)*(np.einsum('...i,...j', GV, V_sub)))
             dE_V = prefactor*(GV_len*np.einsum('...ij,...i', G_sub, C_sub) - (GVC/GV_len)*(np.einsum('...i,...ij', GV, G_sub)))
@@ -463,8 +463,23 @@ class params(object):
             term2_norm_V = GC_lens*pow(V_lens, 3)
             dE_V = (-GC/term1_norm.reshape(-1, 1) +
                    VGC.reshape(-1, 1)*V_sub/term2_norm_V.reshape(-1, 1))
+        elif self.etype == 'frobenius':
+            GC = np.einsum('...ij,...j', G_sub, C_sub)
+            VG = np.einsum('...i,...ij', V_sub, G_sub)
+            VC = np.einsum('...i,...j', V_sub, C_sub)
+            VGC = np.einsum('...i,...i', V_sub, GC)
+            # the norms
+            C_len = np.linalg.norm(C_sub, axis=1).reshape(-1, 1)
+            V_len = np.linalg.norm(V_sub, axis=1).reshape(-1, 1)
+            G_len = np.linalg.norm(G_sub, ord='fro', axis=(1, 2)).reshape(-1, 1, 1)
+            # dE_C
+            dE_C = VG/C_len - (VGC.reshape(-1, 1))*C_sub/pow(C_len, 3)
+            # dE_G
+            dE_G = VC/G_len - (VGC.reshape(-1, 1, 1))*G_sub/pow(G_len, 3)
+            # dE_V
+            dE_V = GC/V_len - (VGC.reshape(-1, 1))*V_sub/pow(V_len, 3)
         else:
-            sys.exit('ERROR: Not implemented')
+            sys.exit('ERROR: Not implemented (gradE)')
         return dE_C, dE_G, dE_V
 
     def noR_batch_gradient(self, batch, omega):
@@ -560,7 +575,16 @@ class params(object):
                 numerator = -np.dot(CG, self.V[t, :])
                 denominator = np.linalg.norm(self.V[t, :])*CG_lens
                 energy = numerator/denominator
-            else: sys.exit('ERROR: Not implemented')
+            elif self.etype == 'frobenius':
+                # mostly copied from cosine
+                CG = np.dot(self.C, self.G[r].T)
+                numerator = -np.dot(CG, self.V[t, :])
+                C_lens = np.linalg.norm(self.C, axis=1)
+                G_len = np.linalg.norm(self.G[r, :, :], ord='fro')
+                V_len = np.linalg.norm(self.V[t, :])
+                denominator = C_lens*G_len*V_len
+                energy = numerator/denominator
+            else: sys.exit('ERROR: Not implemented (E_axis)')
         elif switch == 'R':
             # return over all R
             if self.etype == 'dot':
@@ -582,7 +606,16 @@ class params(object):
                 numerator = -np.dot(GC, self.V[t, :])
                 denominator = np.linalg.norm(self.V[t, :])*GC_lens
                 energy = numerator/denominator
-            else: sys.exit('ERROR: Not implemented')
+            elif self.etype == 'frobenius':
+                GC = np.dot(self.G, self.C[s, :])
+                GC_lens = np.linalg.norm(GC, axis=1)
+                numerator = -np.dot(GC, self.V[t, :])
+                C_len = np.linalg.norm(self.C[s, :])
+                G_lens = np.linalg.norm(self.G, ord='fro', axis=(1, 2))
+                V_len = np.linalg.norm(self.V[t, :])
+                denominator = C_len*G_lens*V_len
+                energy = numerator/denominator
+            else: sys.exit('ERROR: Not implemented (E_axis)')
         elif switch == 'T':
             #return over all T
             if self.etype == 'dot':
@@ -603,7 +636,15 @@ class params(object):
                 numerator = -np.dot(self.V, GC)
                 denominator = np.linalg.norm(GC)*V_lens
                 energy = numerator/denominator
-            else: sys.exit('ERROR: Not implemented')
+            elif self.etype == 'frobenius':
+                GC = np.dot(self.G[r], self.C[s])
+                numerator = -np.dot(self.V, GC)
+                C_len = np.linalg.norm(self.C[s, :])
+                G_len = np.linalg.norm(self.G[r, :, :], ord='fro')
+                V_lens = np.linalg.norm(self.V, axis=1)
+                denominator = C_len*G_len*V_lens
+                energy = numerator/denominator
+            else: sys.exit('ERROR: Not implemented (E_axis)')
         else:
             print 'ERROR: Cannot parse switch.'
             sys.exit()
@@ -629,7 +670,15 @@ class params(object):
             GC_norm = np.linalg.norm(GC)
             V_norm = np.linalg.norm(self.V[t])
             energy = -np.dot(self.V[t], GC)/(GC_norm*V_norm)
-        else: sys.exit('ERROR: Not implemented')
+        elif self.etype == 'frobenius':
+            GC = np.dot(self.G[r], self.C[s])
+            numerator = -np.dot(self.V[t], GC)
+            C_norm = np.linalg.norm(self.C[s, :])
+            G_norm = np.linalg.norm(self.G[r, :, :], ord='fro')
+            V_norm = np.linalg.norm(self.V[t, :])
+            denominator = C_norm*G_norm*V_norm
+            energy = numerator/denominator
+        else: sys.exit('ERROR: Not implemented (E_triple)')
         return energy
 
     def E(self, locations=None):
@@ -687,13 +736,17 @@ class params(object):
                 energy[i] = -np.linalg.norm(np.dot(self.G[triple[1]], 
                                                    self.V[triple[2]]) -\
                                             self.C[triple[0]])
+         # haha wtf is going on here why did I do this
         elif self.etype == 'angular':
             for (i, triple) in enumerate(locations):
                 energy[i] = self.E_triple(triple)
         elif self.etype == 'cosine':
             for (i, triple) in enumerate(locations):
                 energy[i] = self.E_triple(triple)
-        else: sys.exit('ERROR: Not implemented')
+        elif self.etype == 'frobenius':
+            for (i, triple) in enumerate(locations):
+                energy[i] = self.E_triple(triple)
+        else: sys.exit('ERROR: Not implemented (E)')
         # V10
         #energy = []
         #for triple in locations:
@@ -1198,7 +1251,7 @@ def train(training_data, start_parameters, options, VERBOSE=True):
                 # record performance on devset (nips2013)
                 #devset_accuracy(devpath, devlogpath, parameters, n + offset)
                 # endyolo
-            if n%(D*10) == 0:
+            if n%(D*100) == 0:
                 parameters.save(output_root+'_XXX.npy')
                 if VERBOSE:
                     print 'Saved parameters to', output_root+'_XXX.npy'
