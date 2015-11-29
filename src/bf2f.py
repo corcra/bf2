@@ -473,11 +473,11 @@ class params(object):
             V_len = np.linalg.norm(V_sub, axis=1).reshape(-1, 1)
             G_len = np.linalg.norm(G_sub, ord='fro', axis=(1, 2)).reshape(-1, 1, 1)
             # dE_C
-            dE_C = VG/C_len - (VGC.reshape(-1, 1))*C_sub/pow(C_len, 3)
+            dE_C = -VG/C_len + (VGC.reshape(-1, 1))*C_sub/pow(C_len, 3)
             # dE_G
-            dE_G = VC/G_len - (VGC.reshape(-1, 1, 1))*G_sub/pow(G_len, 3)
+            dE_G = -VC/G_len + (VGC.reshape(-1, 1, 1))*G_sub/pow(G_len, 3)
             # dE_V
-            dE_V = GC/V_len - (VGC.reshape(-1, 1))*V_sub/pow(V_len, 3)
+            dE_V = -GC/V_len + (VGC.reshape(-1, 1))*V_sub/pow(V_len, 3)
         else:
             sys.exit('ERROR: Not implemented (gradE)')
         return dE_C, dE_G, dE_V
