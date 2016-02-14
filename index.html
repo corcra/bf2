@@ -1,0 +1,113 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>brí-focal by corcra</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <meta name="viewport" content="width=device-width">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>brí-focal</h1>
+        <p>Joint embedding of words and relationships in semantic space.</p>
+
+        <p class="view"><a href="https://github.com/corcra/bf2">View the Project on GitHub <small>corcra/bf2</small></a></p>
+
+
+        <ul>
+          <li><a href="https://github.com/corcra/bf2/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/corcra/bf2/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/corcra/bf2">View On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h2>
+<a id="intro-level-explanation-for-non-experts" class="anchor" href="#intro-level-explanation-for-non-experts" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Intro-level explanation (for non-experts)</h2>
+
+<p>Suppose we have a set of <em>things</em>, like words in a language, concepts in an ontology, or any other collection of objects. To reason computationally about these things/entities, or use them in modelling tasks we require a representation; a way of encoding them which is meaningful to a computer. A naïve approach might be to number all the entities, so 'aardvark' is 1 and 'zoetrope' is 140,181, but it's not very useful, and may be confusing. In this example entities are ordered alphabetically, but do we really want 'dog' to be closer to 'donkey' than to 'puppy'? Another approach is to make all entities equidistant from each other, which might make sense if we know nothing about them: should 'gabhar' be closer to 'gadhar' than 'caora'? However, this ignores the (possibly unknown) structure existing between these entities. In a good representation, <em>similar</em> entities should have <em>similar representations</em>.</p>
+
+<p>The question is now: how do we know which entities are <em>similar</em> (without asking humans)? For language, a common approach is called <strong>distributional semantics</strong>. The idea (from Firth) is that a 'word is characterised by the company it keeps'; look at the sentences a word appears in, and you'll learn something about its meaning. If two words are completely interchangeable in a sentence, they're probably synonyms. So, choose a representation so that words appearing in similar contexts (within a sentence) have similar representations. If this seems circular, it's because it is, a little. Before we can say how similar a <em>context</em> is, we need the similarity of the <em>words</em> in that context. The way we overcome this is to start with a guess: make up a representation for each word - you can think of this as some location on a map, although in practice it's much higher dimensional - and update them as you see more sentences. Eventually, if all goes well, similar words end up clustered together.</p>
+
+<p>This is great! Now when we look at the representation of 'dog', it's close to 'puppy' and 'doggy' and 'doge' and a little close to 'cat' and 'wolf', not so close to 'horse' and very far from 'sadness'. We can pass these representations into an algorithm to do something else - say, to identify which tweets are about dogs (a noble and important task), and it will 'know' that a person mentioning puppies might be talking about dogs, even if they didn't use that word. That's <em>one</em> of the benefits of having a good representation.</p>
+
+<p>The work, however, is not yet complete. Consider the following:</p>
+
+<ul>
+<li>when I said <em>similar</em>, what exactly did I mean?</li>
+<li>what happens if we just don't have that many sentences?</li>
+</ul>
+
+<h3>
+<a id="notions-of-similarity" class="anchor" href="#notions-of-similarity" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Notions of similarity</h3>
+
+<p>Without further qualification, humans are capable of making vague similarity judgements: you probably agreed that dogs are more like puppies than they are donkeys, but now suppose we're shepherds looking for an animal to guard the flock. In this <em>specific context</em> (that of sheep-guarding), dogs are more like donkeys than puppies (donkeys can be employed to guard livestock, puppies should not). At the same time, puppies and kittens are both <em>young animals</em>, so while searching for cute gifs, either might do. We want a representation which knows about these different <em>types</em> of similarity.</p>
+
+<h3>
+<a id="data-limitations" class="anchor" href="#data-limitations" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Data limitations</h3>
+
+<p>Examples of English are very abundant on the internet. Google is especially good at <a href="https://books.google.com/ngrams">describing the statistics of English</a>, which means we can get a very accurate idea of the <em>typical context</em> for any given word. In other languages and domains, this may not be the case. My focus is on medicine, where the following things occur:</p>
+
+<ol>
+<li>text contains private information about patients, and is not publicly available</li>
+<li>doctors do not write eloquent, diverse and nuanced sentences: doctors are <em>terse</em>
+</li>
+</ol>
+
+<p>So we have limited access to data which may not contain all the information we need. The danger of point 2 is that our idea of a word's context becomes quite coarse. We might know that <em>tamoxifen</em> and <em>imatinib</em> are both drugs, because we see many sentences like 'started on tamoxifen/imatinib' (note that this is a sentence fragment) and have figured out that one 'starts on' drugs, but the fact that these drugs treat entirely different cancers may be lost. This is a problem.</p>
+
+<h3>
+<a id="solutions-and-this-project" class="anchor" href="#solutions-and-this-project" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Solutions and this project</h3>
+
+<p>In this project we came up with a model which can be used to learn representations which know about <em>different notions of similarity</em>, and which can still work even if <em>data is limited</em>. </p>
+
+<p>We did this by extending the notion of 'company' as used by Firth; a word can keep many kinds of company: its neighbours in a sentence <em>as well as</em> any other words with which it has some relationship. Dogs can guard sheep, and so can donkeys, so in the context of 'guarding', they may as well be neighbours. We can then augment our dataset with statements of the form 'X is related to Y through Z' (if they exist!) to provide additional information to <em>both</em>:</p>
+
+<ol>
+<li>provide more information to better tune the representation - knowing that tamoxifen treats breast cancer and imatinib treats liver cancer means the representation should <em>not</em> treat them as synonyms</li>
+<li>allow us to explicitly handle the different <em>types</em> of similarity, as captured by the types of relationships Z entities can participate in, and with whom</li>
+</ol>
+
+<p>Luckily, technical domains such as medicine tend towards categorising their knowledge in structured databases, which provides us a source of 'X is related to Y through Z' statements! (This is not a coincidence.) And as a side-effect of training our representation on such a dataset, we can actually try to <em>extend</em> it. Since we learn a general representation for words regardless of their <em>source</em> (sentences v. relationship statements), we can try to apply what we learned about the <em>relationships</em> to words apearing only in the sentences. That is, if 'gleevec' never appeared in a 'X is related to Y'-type statement, but we learned that gleevec is a synoynm for imatinib, then we can say with some confidence that 'gleevec is related to leukaemia through "treats"'.</p>
+
+<p><img src="https://corcra.github.io/assets/illu.png" alt=""></p>
+
+<h2>
+<a id="advanced-level-explanation" class="anchor" href="#advanced-level-explanation" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Advanced-level explanation</h2>
+
+<p>We are motivated by the idea that <em>relationships</em> between entities in a semantic space can be modelled by <em>geometric transformations</em> of that space. This provides structure on the solution space which should produce more semantically meaningful representations, as well as enabling knowledge discovery by exploiting the learned transformations.</p>
+
+<p>Specifically, we learn a joint generative model over (<strong>S</strong>, <strong>R</strong>, <strong>T</strong>) triples, where <strong>S</strong> and <strong>T</strong> are tokens (e.g. words in a vocabulary) and <strong>R</strong> is a possible relationship between them. Each <strong>S</strong> and <strong>T</strong> receives a vector representation, while <strong>R</strong> is an affine transformation of the vector space. True triples, corresponding to statements "<strong>S</strong> is related to <strong>T</strong> through <strong>R</strong>" have low energy, meaning the cosine distance between the <strong>T</strong> vector and the <em><strong>R</strong>-transformed</em> <strong>C</strong> vector must be low. We relate this to probability using a Boltzmann distribution given this energy function, and learn the set of parameters (all vectors and transformation matrices) using stochastic maximum likelihood. We approximate gradients of the partition function using persistent contrastive divergence, obtaining model samples with Gibbs sampling from the conditional distributions for each element of the triple. Our model can further handle missing labels, such as statements like "S is related to T through some unknown relationship" by averaging weighted gradients according to the conditional probability of each possible label.</p>
+
+<p>For more details, please consult <a href="http://arxiv.org/abs/1510.00259">the paper</a>!</p>
+
+<h2>
+<a id="code" class="anchor" href="#code" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Code</h2>
+
+<p><a href="https://github.com/corcra/bf2">Implementation</a> is in Python, please direct questions or issues to <a href="https://github.com/corcra" class="user-mention">@corcra</a>!</p>
+
+<h2>
+<a id="publications" class="anchor" href="#publications" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Publications</h2>
+
+<ul>
+<li>
+<a href="http://arxiv.org/abs/1510.00259">A Generative Model of Words and Relationships from Multiple Sources</a>; to appear in Proceedings of the <a href="https://www.aaai.org/Conferences/AAAI/aaai16.php">Thirtieth AAAI Conference on Artificial Intelligence 2016</a>
+</li>
+<li>Knowledge Transfer with Medical Language Embeddings; to appear at the <a href="http://www.dmmh.org/sdm16">Fifth Workshop on Data Mining for Medicine and Healthcare</a> at the 16th SIAM International Conference on Data Mining (SDM 2016)</li>
+</ul>
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/corcra">corcra</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
