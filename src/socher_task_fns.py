@@ -51,7 +51,7 @@ def get_conditionals(params, data):
     """
     rela_specific_conditionals = dict((r, [[],[]]) for r in params.relas)
     for (s, r, t, label) in data:
-        unnorm_probs = np.exp(-params.E_axis((s, r, t), 'G'))
+        unnorm_probs = np.exp(-params.E_axis((s, r, t), 'R'))
         normalisation = np.sum(unnorm_probs)
         conditional = unnorm_probs/normalisation
         if label == 1:
@@ -79,10 +79,10 @@ def get_scores(params, data, scoretype='conditional_G'):
         if scoretype == 'energy':
             score = -energy
         elif scoretype == 'conditional_G':
-            denom = np.sum(np.exp(-params.E_axis((s, r, t), 'G')))
+            denom = np.sum(np.exp(-params.E_axis((s, r, t), 'R')))
             score = np.exp(-energy)/denom
         elif scoretype == 'conditional_V':
-            denom = np.sum(np.exp(-params.E_axis((s, r, t), 'V')))
+            denom = np.sum(np.exp(-params.E_axis((s, r, t), 'T')))
             score = np.exp(-energy)/denom
         else:
             sys.exit('ERROR: unknown scoretype '+scoretype)

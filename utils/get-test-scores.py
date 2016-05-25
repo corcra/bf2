@@ -11,7 +11,7 @@ from subprocess import call
 import sys
 
 # use simplified (i.e. aligned with wiki) vocab?
-simple_socher = True
+simple_socher = False
 # save?
 save = True
 
@@ -47,7 +47,7 @@ if save:
 
 # --- load the evaluation data  --- #
 if simple_socher:
-    droot = ''
+    droot = '/cbio/grlab/home/hyland/data/nips13-dataset/Wordnet/simplified_vocab/'
     dev_path = droot + 'dev_triples_simple.txt'
     dev = bf2f.np.array(map(lambda x: map(int, x.strip('\n').split(' ')), open(dev_path,'r').readlines()))
     print 'Dev data read from', dev_path
@@ -55,7 +55,7 @@ if simple_socher:
     test = bf2f.np.array(map(lambda x: map(int, x.strip('\n').split(' ')), open(test_path,'r').readlines()))
     print 'test data read from', test_path
 else:
-    droot = ''
+    droot = '/cbio/grlab/home/hyland/data/bf2-output/nips2013/wordnet/socher_task_full/data/'
     dev_path = droot + 'dev_triples.txt'
     dev = bf2f.np.array(map(lambda x: map(int, x.strip('\n').split(' ')), open(dev_path,'r').readlines()[1:]))
     print 'Dev data read from', dev_path
